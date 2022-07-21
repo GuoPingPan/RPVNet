@@ -61,17 +61,41 @@ import torch.distributed
 
 # print(torch.distributed.is_nccl_available())
 
-import torch
-import torch.nn as nn
+# import torch
+# import torch.nn as nn
+#
+# model = nn.Sequential(
+#     nn.Conv2d(1,1,kernel_size=3,padding=2),
+#     nn.ReLU(inplace=True)
+# )
+#
+# a = torch.randn(size=(1,1,5,5))
+# print(a)
+# model(a)
+# # print(out)
+# print(a)
+#
 
-model = nn.Sequential(
-    nn.Conv2d(1,1,kernel_size=3,padding=2),
-    nn.ReLU(inplace=True)
+import os
+print(os.path.isdir('save'))
+
+import torch
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    '-d',
+    default='fasfa'
 )
 
-a = torch.randn(size=(1,1,5,5))
-print(a)
-model(a)
-# print(out)
-print(a)
+a = parser.parse_args()
 
+# os.mkdir('log/')
+
+#
+# a = torch.nn.Linear(1,3)
+# b = {'state':a.state_dict()}
+#
+# torch.save(b,'save.ckpt')
+# c = torch.load('save.ckpt')
+# print(c)
