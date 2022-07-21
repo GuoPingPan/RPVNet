@@ -130,9 +130,13 @@ class RPVnet(nn.Module):
             Block2(dropout_rate=0.2, pooling=True)
         )
 
-        self.range_stage4 = Block1Res(cs[3],cs[4])
+        self.range_stage4 = nn.Sequential(
+            Block1Res(cs[3],cs[4]),
+            Block2(dropout_rate=0.2, pooling=True)
+        )
+        # self.range_down4 = Block2(dropout_rate=0.2,pooling=True)
+
         # nn.GatFusionModule
-        self.range_down4 = Block2(dropout_rate=0.2,pooling=True)
 
         self.range_stage5 = Block4(cs[4],cs[5],cs[3],upscale_factor=2,dropout_rate=0.2)
         self.range_stage6 = Block4(cs[5],cs[6],cs[2],2,0.2)
@@ -216,16 +220,16 @@ class RPVnet(nn.Module):
         v3 = self.voxel_down3(v2) #256
         v4 = self.voxel_down4(v3) #256
         points.F = self.point_stem[1](points.F)
-        range1 = self.range_stage1[0](range0) # 1,64,32,2048
-        temp = self.range_stage1[1](range1)
-        range2 = self.range_stage2[0](temp) # 1,128,16,1024
-        temp = self.range_stage2[1](range2)
-        range3 = self.range_stage3[0](temp) # 1,256,8,512
-        temp = self.range_stage3[1](range3)
-        range4 = self.range_stage4(temp) # 1,256,4,256
+        range1 = self.range_stage1(range0) # 1,64,32,2048
+        # temp = self.range_stage1[1](range1)
+        range2 = self.range_stage2(range1) # 1,128,16,1024
+        # temp = self.range_stage2[1](range2)
+        range3 = self.range_stage3(range2) # 1,256,8,512
+        # temp = self.range_stage3[1](range3)
+        range4 = self.range_stage4(range3) # 1,256,4,256
 
         range4,points,v4 = self.gfm_stage4(range4,points,v4,px,py)
-        range4 = self.range_down4(range4) # 1,256,4,128
+        # range4 = self.range_down4(range4) # 1,256,4,128
         v4.F = self.dropout(v4.F)
 
         ''' Fuse 3 '''
@@ -262,3 +266,6 @@ model = RPVnet(
     num_classes=19
 )
 # print(model)
+# for name,param in model.named_parameters():
+#     if  'final' in name:
+#         print(name)

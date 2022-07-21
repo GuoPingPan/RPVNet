@@ -104,10 +104,10 @@ class Block4(nn.Module):
         self.dropout = nn.Dropout2d(p=dropout_rate) if drop_out else nn.Identity()
 
     def forward(self,x,skip):
-        print(skip.shape)
-        print(x.shape)
+        # print(skip.shape)
+        # print(x.shape)
         x = self.upscale(x)
-        print(x.shape)
+        # print(x.shape)
         x = self.dropout(x)
         # print(x.shape)
         # print(skip.shape)

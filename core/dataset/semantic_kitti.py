@@ -334,46 +334,47 @@ class SemanticKITTIInternal:
         return sparse_collate_fn(inputs)
 
 '''-------------------------------------------------------------------------------'''
-import yaml
-data_cfg = yaml.safe_load(open('../../config/semantic-kitti.yaml', 'r'))
+# import yaml
+# data_cfg = yaml.safe_load(open('../../config/semantic-kitti.yaml', 'r'))
+# #
+# data = SemanticKITTIInternal(
+#     root='/home/pgp/xialingying/dataset',
+#     voxel_size=data_cfg['voxel_size'],
+#     range_size=data_cfg['range_size'],
+#     sample_stride=data_cfg['sample_stride'],
+#     split=data_cfg['split']['train'],
+#     max_voxels=data_cfg['max_voxels'],
+#     label_name_mapping=data_cfg['label_name_mapping'],
+#     kept_labels=data_cfg['kept_labels']
+# )
+# #
+# int_out = data.__getitem__(1)
+# int_out = data.collate_fn([int_out])
 #
-data = SemanticKITTIInternal(
-    root='/home/pgp/xialingying/dataset',
-    voxel_size=data_cfg['voxel_size'],
-    range_size=data_cfg['range_size'],
-    sample_stride=data_cfg['sample_stride'],
-    split=data_cfg['split']['train'],
-    max_voxels=data_cfg['max_voxels'],
-    label_name_mapping=data_cfg['label_name_mapping'],
-    kept_labels=data_cfg['kept_labels']
-)
+# lidar = int_out['lidar']
+# image = int_out['image']
+# label = int_out['label']
+# py = int_out['py']
+# px = int_out['px']
 #
-int_out = data.__getitem__(1)
-int_out = data.collate_fn([int_out])
-
-lidar = int_out['lidar']
-image = int_out['image']
-label = int_out['label']
-py = int_out['py']
-px = int_out['px']
-
-print(lidar.F.shape,lidar.C.shape)
-print(label.F.shape,label.C.shape)
-
-from core.models.rpvnet import RPVnet
-
-model = RPVnet(
-    cr=1,
-    vsize=0.05,
-    cs = [32,64,128,256,256,128,128,64,32],
-    num_classes=19
-)
-
-loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
-
-out = model(lidar,image,py,px)
-loss = loss_fn(out,label.F.long())
-print(loss)
+# print(lidar.F.shape,lidar.C.shape)
+# print(label.F.shape,label.C.shape)
+# print(np.where(label.F!=255))
+#
+# from core.models.rpvnet import RPVnet
+#
+# model = RPVnet(
+#     cr=1,
+#     vsize=0.05,
+#     cs = [32,64,128,256,256,128,128,64,32],
+#     num_classes=19
+# )
+#
+# loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
+#
+# out = model(lidar,image,py,px)
+# loss = loss_fn(out,label.F.long())
+# print(loss)
 
 
 
