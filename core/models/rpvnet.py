@@ -69,40 +69,40 @@ class RPVnet(nn.Module):
         super(RPVnet, self).__init__()
 
         self.vsize = vsize
-        cr = kwargs.get('cr')
-        cs = torch.Tensor(kwargs.get('cs'))
-        num_classes = kwargs.get('num_classes')
-        cs = (cs*cr).int()
+        self.cr = kwargs.get('cr')
+        self.cs = torch.Tensor(kwargs.get('cs'))
+        self.num_classes = kwargs.get('num_classes')
+        self.cs = (self.cs*self.cr).int()
 
 
         ''' voxel branch '''
         self.voxel_stem = nn.Sequential(
-            spnn.Conv3d(4, cs[0], kernel_size=3, stride=1),
-            spnn.BatchNorm(cs[0]), spnn.ReLU(True),
-            spnn.Conv3d(cs[0], cs[0], kernel_size=3, stride=1),
-            spnn.BatchNorm(cs[0]), spnn.ReLU(True))
-        self.voxel_down1 = DownVoxelStage(cs[0],cs[1],
+            spnn.Conv3d(4, self.cs[0], kernel_size=3, stride=1),
+            spnn.BatchNorm(self.cs[0]), spnn.ReLU(True),
+            spnn.Conv3d(self.cs[0], self.cs[0], kernel_size=3, stride=1),
+            spnn.BatchNorm(self.cs[0]), spnn.ReLU(True))
+        self.voxel_down1 = DownVoxelStage(self.cs[0],self.cs[1],
                                       b_kernel_size=2,b_stride=2,b_dilation=1,
                                       kernel_size=3,stride=1,dilation=1)
-        self.voxel_down2 = DownVoxelStage(cs[1], cs[2],
+        self.voxel_down2 = DownVoxelStage(self.cs[1], self.cs[2],
                                       b_kernel_size=2, b_stride=2, b_dilation=1,
                                       kernel_size=3, stride=1, dilation=1)
-        self.voxel_down3 = DownVoxelStage(cs[2], cs[3],
+        self.voxel_down3 = DownVoxelStage(self.cs[2], self.cs[3],
                                       b_kernel_size=2, b_stride=2, b_dilation=1,
                                       kernel_size=3, stride=1, dilation=1)
-        self.voxel_down4 = DownVoxelStage(cs[3], cs[4],
+        self.voxel_down4 = DownVoxelStage(self.cs[3], self.cs[4],
                                       b_kernel_size=2, b_stride=2, b_dilation=1,
                                       kernel_size=3, stride=1, dilation=1)
-        self.voxel_up1 = UpVoxelStage(cs[4],cs[5],cs[3],
+        self.voxel_up1 = UpVoxelStage(self.cs[4],self.cs[5],self.cs[3],
                                  b_kernel_size=2,b_stride=2,
                                  kernel_size=3,stride=1,dilation=1)
-        self.voxel_up2 = UpVoxelStage(cs[5],cs[6],cs[2],
+        self.voxel_up2 = UpVoxelStage(self.cs[5],self.cs[6],self.cs[2],
                                  b_kernel_size=2,b_stride=2,
                                  kernel_size=3,stride=1,dilation=1)
-        self.voxel_up3 = UpVoxelStage(cs[6],cs[7],cs[1],
+        self.voxel_up3 = UpVoxelStage(self.cs[6],self.cs[7],self.cs[1],
                                  b_kernel_size=2,b_stride=2,
                                  kernel_size=3,stride=1,dilation=1)
-        self.voxel_up4 = UpVoxelStage(cs[7],cs[8],cs[0],
+        self.voxel_up4 = UpVoxelStage(self.cs[7],self.cs[8],self.cs[0],
                                  b_kernel_size=2,b_stride=2,
                                  kernel_size=3,stride=1,dilation=1)
 
@@ -110,77 +110,77 @@ class RPVnet(nn.Module):
         ''' range branch '''
 
         self.range_stem = nn.Sequential(
-            ResContextBlock(2,cs[0]),
-            ResContextBlock(cs[0], cs[0]),
-            ResContextBlock(cs[0], cs[0]),
+            ResContextBlock(2,self.cs[0]),
+            ResContextBlock(self.cs[0], self.cs[0]),
+            ResContextBlock(self.cs[0], self.cs[0]),
             # Block1Res(cs[0],cs[0])
         )
         # nn.GatFusionModule
 
         self.range_stage1 = nn.Sequential(
-            Block1Res(cs[0],cs[1]),
+            Block1Res(self.cs[0],self.cs[1]),
             Block2(dropout_rate=0.2,pooling=True,drop_out=False)
         )
         self.range_stage2 = nn.Sequential(
-            Block1Res(cs[1],cs[2]),
+            Block1Res(self.cs[1],self.cs[2]),
             Block2(dropout_rate=0.2, pooling=True)
         )
         self.range_stage3 = nn.Sequential(
-            Block1Res(cs[2],cs[3]),
+            Block1Res(self.cs[2],self.cs[3]),
             Block2(dropout_rate=0.2, pooling=True)
         )
 
         self.range_stage4 = nn.Sequential(
-            Block1Res(cs[3],cs[4]),
+            Block1Res(self.cs[3],self.cs[4]),
             Block2(dropout_rate=0.2, pooling=True)
         )
         # self.range_down4 = Block2(dropout_rate=0.2,pooling=True)
 
         # nn.GatFusionModule
 
-        self.range_stage5 = Block4(cs[4],cs[5],cs[3],upscale_factor=2,dropout_rate=0.2)
-        self.range_stage6 = Block4(cs[5],cs[6],cs[2],2,0.2)
+        self.range_stage5 = Block4(self.cs[4],self.cs[5],self.cs[3],upscale_factor=2,dropout_rate=0.2)
+        self.range_stage6 = Block4(self.cs[5],self.cs[6],self.cs[2],2,0.2)
         # nn.GatFusionModule
 
-        self.range_stage7 = Block4(cs[6],cs[7],cs[1],2,0.2)
-        self.range_stage8 = Block4(cs[7],cs[8],cs[0],2,0.2,drop_out=False)
+        self.range_stage7 = Block4(self.cs[6],self.cs[7],self.cs[1],2,0.2)
+        self.range_stage8 = Block4(self.cs[7],self.cs[8],self.cs[0],2,0.2,drop_out=False)
         # nn.GatFusionModule
 
         ''' point branch '''
         self.point_stem = nn.ModuleList([
             # 32
             nn.Sequential(
-                nn.Linear(4,cs[0]),
-                nn.BatchNorm1d(cs[0]),
+                nn.Linear(4,self.cs[0]),
+                nn.BatchNorm1d(self.cs[0]),
                 nn.ReLU(True),
             ),
             # 256
             nn.Sequential(
-                nn.Linear(cs[0], cs[4]),
-                nn.BatchNorm1d(cs[4]),
+                nn.Linear(self.cs[0], self.cs[4]),
+                nn.BatchNorm1d(self.cs[4]),
                 nn.ReLU(True),
             ),
             # 128
             nn.Sequential(
-                nn.Linear(cs[4], cs[6]),
-                nn.BatchNorm1d(cs[6]),
+                nn.Linear(self.cs[4], self.cs[6]),
+                nn.BatchNorm1d(self.cs[6]),
                 nn.ReLU(True),
             ),
             # 32
             nn.Sequential(
-                nn.Linear(cs[6], cs[8]),
-                nn.BatchNorm1d(cs[8]),
+                nn.Linear(self.cs[6], self.cs[8]),
+                nn.BatchNorm1d(self.cs[8]),
                 nn.ReLU(True),
             ),
 
         ])
 
-        self.gfm_stem = GFM(cs[0])
-        self.gfm_stage4 = GFM(cs[4])
-        self.gfm_stage6 = GFM(cs[6])
-        self.gfm_stage8 = GFM(cs[8])
+        self.gfm_stem = GFM(self.cs[0])
+        self.gfm_stage4 = GFM(self.cs[4])
+        self.gfm_stage6 = GFM(self.cs[6])
+        self.gfm_stage8 = GFM(self.cs[8])
 
-        self.final = nn.Linear(cs[8],num_classes)
+        self.final = nn.Linear(self.cs[8],self.num_classes)
 
         self.weight_initialization()
 

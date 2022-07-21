@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from tqdm import tqdm
 
@@ -13,6 +14,7 @@ from torch.utils.data import DataLoader,BatchSampler
 
 from core.dataset.semantic_kitti import SemanticKITTIInternal
 from core.models.rpvnet import RPVnet
+from core.evaluator import MeanIoU
 
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
@@ -54,7 +56,7 @@ class Trainer():
 
         self.criterion = getattr(nn,model_cfg['train']['loss'])(ignore_index=model_cfg['train']['ignore_index'])
         self.optimizer = getattr(optim,model_cfg['train']['optimizer'])(params=self.model.parameters(),lr=model_cfg['train']['lr'])
-
+        self.evaluator = MeanIoU(model_cfg['num_classes'],model_cfg['ignore_index'])
         data = SemanticKITTIInternal(
             root=args.dataset_dir,
             voxel_size=data_cfg['voxel_size'],
@@ -119,11 +121,12 @@ class Trainer():
                     # 由于这里要保证每个模型的初始权重相同,因此要先保存再重新加载
                     if self.rank == 0:
                         ckpt_path = os.path.join(self.log_dir,'initial.ckpt')
-                        torch.save({
-                            'state_dict': self.model.state_dict(),
-                            'optimizer': self.optimizer.state_dict(),
-                            'info': None
-                        },ckpt_path)
+                        if not os.path.exists(ckpt_path):
+                            torch.save({
+                                'state_dict': self.model.state_dict(),
+                                'optimizer': self.optimizer.state_dict(),
+                                'info': None
+                            },ckpt_path)
 
                     dist.barrier()
                     state_dict = torch.load(self.log_dir,ckpt_path)
@@ -150,7 +153,8 @@ class Trainer():
     #     self.info = state_dict['info']
     #     print(f'info: {self.info}')
 
-
+    def cleanup(self):
+        dist.destroy_process_group()
 
     def train(self):
 
@@ -159,8 +163,30 @@ class Trainer():
                 # 这里会根据每个epoch生成不同的种子来打乱数据
                 self.sampler.set_epoch(epoch)
 
-            loss = self.train_each_epoch()
-            print('loss',loss)
+            loss,iou,miou,acc = self.train_each_epoch()
+
+            if self.rank == 0:
+                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
+                      f'   Mean Loss:{loss}   mIoU:{miou}   Accuary:{acc}')
+
+            if miou > self.info['best_train_iou']:
+                print(f'Best mean iou in training set so far, save model!')
+                self.info['epoch'] = epoch
+                self.info['train_loss'] = loss
+                self.info['train_acc'] = acc
+                self.info['train_iou'] = iou
+                self.info['best_train_iou'] =miou
+                state_dict = {
+                    'state_dict': self.model.state_dict(),
+                    'optimizer': self.optimizer.state_dict(),
+                    'info': self.info
+                }
+                if (self.gpus > 1 and self.rank == 0):
+                    self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
+                elif self.gpus == 1 or self.device == 'cpu':
+                    self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
+
+        self.cleanup()
 
     def init_distributed_mode(self,args):
         if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
@@ -197,43 +223,52 @@ class Trainer():
 
             return value
 
-    def train_each_epoch(self):
+    def train_each_epoch(self,epoch):
 
-        torch.cuda.empty_cache()
 
         if self.gpus > 1 and self.rank == 0:
-            self.dataloader = tqdm(self.dataloader)
-        else:
-            self.dataloader = tqdm(self.dataloader)
+            self.dataloader = tqdm(self.dataloader,file=sys.stdout)
+        elif self.gpus == 1 or self.device == 'cpu':
+            self.dataloader = tqdm(self.dataloader,file=sys.stdout)
 
+        torch.cuda.empty_cache()
         self.model.train()
+        self.optimizer.zero_grad()
+        self.evaluator.reset()
 
-        mean_loss = 0
+        mean_loss = torch.zeros(1).to(self.device)
+
         for batch,data in enumerate(self.dataloader):
-            lidar = data['lidar']
-            label = data['label']
-            image = data['image']
-            py = data['py']
-            px = data['px']
+            lidar,label,image = data['lidar'],data['label'],data['image']
+            py,px = data['py'],data['px']
+
             # 因为pin_memory已将数据放到gpu中
-            # if self.gpus:
-            #     lidar.cuda()
-            #     label.cuda()
-            #     image.cuda()
-            #     for x in px: x.cuda()
-            #     for y in py: y.cuda()
+            if self.gpus:
+                lidar.cuda(),label.cuda(),image.cuda()
+                for x in px: x.cuda()
+                for y in py: y.cuda()
 
             outputs = self.model(lidar,image,py,px)
 
-            if outputs.requires_grad:
-                loss = self.criterion(outputs,label.F.long())
+            loss = self.criterion(outputs,label.F.long())
+            loss.backward()
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                loss = self.reduce_value(loss,average=True)
-                self.optimizer.step()
+            loss = self.reduce_value(loss,average=True)
+            mean_loss = (mean_loss*batch + loss.detach()) / (batch + 1)
+            iou,miou,acc = self.evaluator(outputs,label.F.long())
 
-            loss_all += loss.item()
-            print('loss',loss.item())
+            assert torch.isfinite(loss),f'ERROR: non-finite loss, ending training! {loss}'
 
-        return loss_all/self.batch_size
+            if self.rank == 0:
+                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
+                      f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
+
+
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+
+        # 等待所有进程计算完毕
+        if self.device != torch.device('cpu'):
+            torch.cuda.synchronize(self.device)
+
+        return mean_loss,self.evaluator.epoch_miou()
