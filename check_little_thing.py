@@ -99,3 +99,10 @@ a = parser.parse_args()
 # torch.save(b,'save.ckpt')
 # c = torch.load('save.ckpt')
 # print(c)
+
+
+
+import torch
+m = torch.nn.Linear(1,1)
+a = torch.optim.SGD(m.parameters(),lr=0.1)
+print(a.name)
