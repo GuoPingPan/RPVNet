@@ -50,7 +50,7 @@ class MeanIoU(object):
             temp1 = torch.sum(tar==i).item()
             temp2 = torch.sum(pre==i).item()
             temp3 = torch.sum((tar==i) & (pre==tar)).item()
-            print(temp1,temp2,temp3)
+            # print(temp1,temp2,temp3)
             batch_target[i]= temp1
             batch_pred[i] = temp2
             batch_correct[i] = temp3

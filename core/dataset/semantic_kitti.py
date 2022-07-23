@@ -137,12 +137,12 @@ class SemanticKITTIInternal:
 
         points_xyz = block[:,:3]
         # 根据 x,y,z 分别最小的坐标值
-        points_xyz -= points_xyz.min(0,keepdims=1)
+        points_xyz_norm = points_xyz - points_xyz.min(0,keepdims=1)
 
         points_refl = block[:,3]
         self.data = {}
         self.point_valid_index = None
-        self.do_voxel_projection(block,points_xyz,labels_)
+        self.do_voxel_projection(block,points_xyz_norm,labels_)
         self.do_range_projection(points_xyz,points_refl)
 
         self.data['filename'] = self.files[index]
@@ -252,7 +252,6 @@ class SemanticKITTIInternal:
         # 累加求得每个点在哪条线上
         proj_y = np.cumsum(proj_y)
         # todo 如何去解决旋转会导致索引越界
-        # print(proj_y.max())
         # print(np.where(proj_y>=65.0))
 
         # scale to image size using angular resolution

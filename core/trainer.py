@@ -26,7 +26,6 @@ class Trainer():
         self.gpus = model_cfg['train']['gpus']
         self.lr = model_cfg['train']['lr']
         self.loss = model_cfg['train']['loss']
-        self.optimizer = model_cfg['train']['optimizer']
         self.epochs = model_cfg['train']['epochs']
         self.mode = ['train','val','test']
         self.log_dir = args.log
@@ -52,10 +51,6 @@ class Trainer():
             num_classes = model_cfg['num_classes']
         )
 
-        self.criterion = getattr(nn,model_cfg['train']['loss'])(ignore_index=model_cfg['train']['ignore_index'])
-        self.optimizer = getattr(optim,model_cfg['train']['optimizer'])(params=self.model.parameters(),lr=model_cfg['train']['lr'])
-        self.evaluator = MeanIoU(model_cfg['num_classes'],model_cfg['train']['ignore_index'])
-
         data = SemanticKITTIInternal(
             root=args.dataset,
             voxel_size=data_cfg['voxel_size'],
@@ -70,15 +65,22 @@ class Trainer():
         if args.checkpoint is not None:
             state = torch.load(args.checkpoint,map_location=self.device)
             print(state['info'])
-            self.epochs = state['info']['epoch']
+            self.epochs = state['info']['epochs']
             self.info['epochs'] = self.epochs
             self.model.load_state_dict(state['state_dict'])
-            self.optimizer.load_state_dict(state['optimizer'])
 
-        # todo
-        # if args.freeze_layer:
-        #     pass
+        # freeze
+        if args.freeze_layers:
+            for name,param in self.model.named_parameters():
+                if "final" not in name:
+                    param.requires_grad_(False)
 
+        param = [p for  p in self.model.parameters() if p.requires_grad]
+        self.optimizer = getattr(optim,model_cfg['train']['optimizer'])(params = param,lr=model_cfg['train']['lr'])
+        self.criterion = getattr(nn,model_cfg['train']['loss'])(ignore_index=model_cfg['train']['ignore_index'])
+        self.evaluator = MeanIoU(num_classes=model_cfg['num_classes'],rank=-100,ignore_label=model_cfg['train']['ignore_index'])
+
+        # num of worker
         nw = min([os.cpu_count(), self.batch_size, 8])
 
         if self.device == 'cpu':
@@ -108,6 +110,7 @@ class Trainer():
                 self.world_size = args.world_szie
                 self.lr = self.lr*self.world_size
                 self.gpus = torch.cuda.device_count()
+                self.evaluator.rank = self.rank
 
                 self.sampler = DistributedSampler(data,rank=self.rank,shuffle= True)
                 batch_sampler = BatchSampler(self.sampler,batch_size=self.batch_size//2,drop_last=True)
@@ -118,6 +121,7 @@ class Trainer():
                                              collate_fn=data.collate_fn)
                 # 这里device默认是cuda,因为在init进程的时候已经创建set_device了,因此这里会自动分配gpu
                 self.model.to(self.device)
+                
                 if args.checkpoint is None:
                     # 由于这里要保证每个模型的初始权重相同,因此要先保存再重新加载
                     if self.rank == 0:
@@ -125,23 +129,23 @@ class Trainer():
                         if not os.path.exists(ckpt_path):
                             torch.save({
                                 'state_dict': self.model.state_dict(),
-                                'optimizer': self.optimizer.state_dict(),
                                 'info': None
                             },ckpt_path)
 
                     dist.barrier()
-                    state_dict = torch.load(self.log_dir,ckpt_path)
+                    state_dict = torch.load(ckpt_path,map_location=self.device)
                     self.model.load_state_dict(state_dict['state_dict'],strict=True)
-                    self.optimizer.load_state_dict(state_dict['optimizer'])
 
-                    # todo
-                    # if args.freeze_layer:
-                    #     pass
+                    # freeze
+                    if args.freeze_layers:
+                        for name, param in self.model.named_parameters():
+                            if "final" not in name:
+                                param.requires_grad_(False)
 
                 # 这里的args.gpu应该是当前进程使用的gpu,而上面的device是'cuda'
                 self.model = torch.nn.parallel.DistributedDataParallel(self.model,device_ids=[args.gpu])
-
-
+                param = [p for p in self.model.parameters() if p.requires_grad]
+                self.optimizer = getattr(optim, model_cfg['train']['optimizer'])(params=param,lr=model_cfg['train']['lr'])
 
 
     def save_checkpoint(self,state_dict,log,shuffix=''):
@@ -157,10 +161,10 @@ class Trainer():
                 # 这里会根据每个epoch生成不同的种子来打乱数据
                 self.sampler.set_epoch(epoch)
 
-            loss,iou,miou,acc = self.train_each_epoch(epoch)
+            loss,(iou,miou,acc) = self.train_each_epoch(epoch)
 
-            if self.rank == 0:
-                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
+            if self.gpus <= 1 or self.rank == 0:
+                print(f'Epoch:[{epoch+1:>3d}/{self.epochs:>3d}]'
                       f'   Mean Loss:{loss}   mIoU:{miou}   Accuary:{acc}')
 
             if miou > self.info['best_train_iou']:
@@ -170,17 +174,21 @@ class Trainer():
                 self.info['train_acc'] = acc
                 self.info['train_iou'] = iou
                 self.info['best_train_iou'] =miou
-                state_dict = {
-                    'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict(),
-                    'info': self.info
-                }
-                if self.gpus <= 1:
-                    self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
-                elif self.rank == 0:
-                    self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
 
-        self.cleanup()
+                # if epoch % 10 == 0:
+            state_dict = {
+                'state_dict': self.model.state_dict(),
+                'info': self.info
+            }
+            if self.gpus <= 1 or self.rank == 0:
+                self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:.3f}_'
+                                                                     f'e{int(epoch)}_'
+                                                                     f'cr{self.model.cr:.2f}_'
+                                                                     f'vs{self.model.vsize:.2f}_'
+                                                                     f'g{self.gpus:1d}.ckpt')
+
+        if self.gpus > 1:
+            self.cleanup()
 
     def init_distributed_mode(self,args):
         if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
@@ -219,10 +227,7 @@ class Trainer():
 
     def train_each_epoch(self,epoch):
 
-
-        if self.gpus <= 1:
-            self.dataloader = tqdm(self.dataloader,file=sys.stdout)
-        elif self.rank == 0:
+        if self.gpus <= 1 or self.rank == 0:
             self.dataloader = tqdm(self.dataloader,file=sys.stdout)
 
         torch.cuda.empty_cache()
@@ -236,7 +241,6 @@ class Trainer():
             lidar,label,image = data['lidar'],data['label'],data['image']
             py,px = data['py'],data['px']
 
-            # 因为pin_memory已将数据放到gpu中
             if self.gpus >= 1:
                 lidar,label,image = lidar.cuda(),label.cuda(),image.cuda()
                 px = [x.cuda() for x in px]
@@ -250,22 +254,19 @@ class Trainer():
             if (self.gpus > 1 and self.rank == 0):
                 loss = self.reduce_value(loss,average=True)
             mean_loss = (mean_loss*batch + loss.detach()) / (batch + 1)
-            iou,miou,acc = self.evaluator(outputs.max(dim=1)[1],label.F.long())
+            iou,miou,acc = self.evaluator(outputs.argmax(dim=1),label.F.long())
 
             assert torch.isfinite(loss),f'ERROR: non-finite loss, ending training! {loss}'
 
-            if self.gpus <= 1:
-                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
-                      f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
-            elif self.rank == 0:
-                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
+            if self.gpus <= 1 or self.rank == 0:
+                print(f'Batch:[{batch+1:>3d}/{self.batch_size}]'
                       f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
 
             self.optimizer.step()
             self.optimizer.zero_grad()
 
         # 等待所有进程计算完毕
-        if self.device != torch.device('cpu'):
+        if self.gpus > 1:
             torch.cuda.synchronize(self.device)
 
         return mean_loss,self.evaluator.epoch_miou()

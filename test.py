@@ -24,18 +24,32 @@ from core.dataset.semantic_kitti import SemanticKITTIInternal
 import warnings
 warnings.filterwarnings("ignore")
 
-a = SemanticKITTIInternal(root='/home/pgp/velodyne',
-                          voxel_size=0.05,
-                          num_points=80000,
-                          sample_stride=1,
-                          split='core',
-                          device = 'cpu',
-                          google_mode=False)
 
-int_out = a.__getitem__(1)
-int_out = a.collate_fn([int_out])
-print(int_out)
-exit()
+import yaml
+from torch.utils.data import DataLoader
+data_cfg = yaml.safe_load(open('config/semantic-kitti.yaml', 'r'))
+#
+data = SemanticKITTIInternal(
+    root='/home/pgp/xialingying/dataset',
+    voxel_size=data_cfg['voxel_size'],
+    range_size=data_cfg['range_size'],
+    sample_stride=data_cfg['sample_stride'],
+    split=data_cfg['split']['train'],
+    max_voxels=data_cfg['max_voxels'],
+    label_name_mapping=data_cfg['label_name_mapping'],
+    kept_labels=data_cfg['kept_labels']
+)
+dataloader = DataLoader(data,
+                             batch_size=2,
+                             num_workers=4,
+                             collate_fn=data.collate_fn,
+                             shuffle=True)
+#
+int_out = data.__getitem__(1)
+int_out = data.collate_fn([int_out])
+
+int_out = next(iter(dataloader))
+
 
 from core.models.rpvnet import RPVnet
 from thop import profile
@@ -45,13 +59,19 @@ image = int_out['image']
 py = int_out['py']
 px = int_out['px']
 
-model = RPVnet(cr=1,num_classes=19,device='cpu').to('cpu')
-t1 = time.time()
-# out = model(lidar,image,py,px)
-flops,params = profile(model,(lidar,image,py,px))
-print('flops: ', flops, 'params: ', params)
-print('flops: %.2f M, params: %.2f M' % (flops / 1000000.0, params / 1000000.0))
-print(time.time()-t1)
+model = RPVnet(
+    cr=1,
+    vsize=0.05,
+    cs = [32,64,128,256,256,128,128,64,32],
+    num_classes=19
+)
+# t1 = time.time()
+out = model(lidar,image,py,px)
+
+# flops,params = profile(model,(lidar,image,py,px))
+# print('flops: ', flops, 'params: ', params)
+# print('flops: %.2f M, params: %.2f M' % (flops / 1000000.0, params / 1000000.0))
+# print(time.time()-t1)
 
 # dataloader = torch.utils.data.DataLoader(
 #     a,

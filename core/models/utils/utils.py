@@ -83,7 +83,6 @@ def point_to_voxel(x: SparseTensor, z: PointTensor) -> SparseTensor:
         # z.additional_features['idx_query'][x.s] = idx_query
         # z.additional_features['counts'][x.s] = counts
     else:
-
         idx_query = z.additional_features['idx_query'][x.s]
         counts = z.additional_features['counts'][x.s]
 
@@ -147,9 +146,11 @@ def range_to_point(x,px,py):
     # t1 = time.time() #0.01*batch_size
     for batch,(p_x,p_y) in enumerate(zip(px,py)):
         pypx = torch.stack([p_x,p_y],dim=2).to(px[0].device)
+        # print(pypx.shape,x.shape) # torch.Size([1, 111338, 2]) torch.Size([1, 32, 64, 2048])
         resampled = grid_sample(x[batch].unsqueeze(0),pypx.unsqueeze(0))
-        # print(resampled.squeeze().permute(1,0).shape)
+        # print(resampled.shape) # torch.Size([1, 32, 1, 111338])
         r2p.append(resampled.squeeze().permute(1,0))
+        # print(resampled.squeeze().permute(1,0).shape)
 
     # print(time.time()-t1)
 
@@ -165,10 +166,10 @@ def point_to_range(range_shape,pF,px,py):
         image = torch.zeros(size=(H,W,pF.shape[1]))
         p_x = torch.floor((p_x/2. + 0.5) * W).long()
         p_y = torch.floor((p_y/2. + 0.5) * H).long()
-        image[p_y,p_x] = pF[cnt,cnt+p_x.shape[0]]
+        image[p_y,p_x] = pF[cnt:cnt+p_x.shape[1]]
 
         r.append(image.permute(2,0,1))
-        cnt += p_x.shape[0]
+        cnt += p_x.shape[1]
 
     return torch.stack(r,dim=0).to(px[0].device)
 

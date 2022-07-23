@@ -239,6 +239,7 @@ class RPVnet(nn.Module):
 #     num_classes=19
 # )
 # print(model)
+
 # for name,param in model.named_parameters():
 #     if  'final' in name:
 #         print(name)

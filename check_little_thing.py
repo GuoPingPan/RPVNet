@@ -107,7 +107,13 @@ import torch
 # a = torch.optim.SGD(m.parameters(),lr=0.1)
 # print(a.name)
 
-a = torch.rand(size=(3,4))
-print(a)
-print(torch.max(a,dim=1))
-print(a.max(dim=1))
+# a = torch.rand(size=(3,4))
+# print(a)
+# print(torch.max(a,dim=1))
+# print(a.max(dim=1))
+# print(a.argmax(dim=1))
+#
+# b = torch.Tensor([-100.1])
+#
+# print(torch.round(b))
+
