@@ -47,14 +47,18 @@ def main(args):
     if args.log is None:
         root,_ = os.path.split(os.path.abspath(__file__))
         default= root + '/log/' + \
-                 datetime.datetime.now().strftime("%Y-%-m-%d-%H:%M") + '/',
+                 datetime.datetime.now().strftime("%Y-%-m-%d-%H:%M") + '/'
+        print(default)
         print(f'The log dir [{args.log}] doesn\'t exist, Do you want to use'
               f'[{default}] as default? [y/n]')
         sig = input()
         if sig in ['Y','y']:
             args.log = default
-            os.mkdir(root+'/log/')
-            os.mkdir(default)
+            if not os.path.exists(root+'/log/'): os.mkdir(root+'/log/')
+            if not os.path.exists(default): os.mkdir(default)
+            else:
+                print(f'Check the log dir.')
+                quit()
         else:
             print(f'Check the log dir.')
             quit()
@@ -69,10 +73,18 @@ def main(args):
                 else:
                     print(f'Check the log dir.')
                     quit()
+        else:
+            print(f'Using the dir [{args.log}] to contains the log? [y/n]')
+            sig = input()
+            if sig in ['Y', 'y']:
+                os.mkdir(args.log)
+            else:
+                print(f'Check the log dir.')
+                quit()
 
     # check if use pretrained model
     if args.checkpoint is not None:
-        if os.path.isfile(args.checkpoint) and args.checkpoint.endwith('.ckpt'):
+        if os.path.isfile(args.checkpoint) and args.checkpoint.endswith('.ckpt'):
             print(f'Using the pretrained model:[{args.checkpoint}]')
 
 
@@ -118,7 +130,7 @@ if __name__=='__main__':
     )
     parser.add_argument(
         '--freeze_layers',
-        type=bool,
+        action='store_true',
         default=False
     )
     parser.add_argument(
