@@ -27,7 +27,6 @@ class SemanticKITTIInternal:
                  range_size = None,
                  sample_stride=1,
                  submit=False,
-                 # device='cpu',
                  **kwargs):
 
         self.root = root
@@ -36,7 +35,6 @@ class SemanticKITTIInternal:
         self.range_size = tuple(range_size)
         self.max_voxels = max_voxels
         self.sample_stride = sample_stride
-        # self.device = device
         self.mode = mode
 
         # 如果提交则加上val一起进行训练
@@ -91,10 +89,10 @@ class SemanticKITTIInternal:
         return len(self.files)
 
     def __getitem__(self, index):
-        # todo 是否可以加入shuffle操作
-        # 应该在dataloader里面设置就行
+
         assert os.path.exists(self.files[index]),f'the [{self.files[index]}] doesn\'t exist.'
 
+        # todo 是否可以加入shuffle操作 [解]:直接在Dataloader中进行shuffer就行
         with open(self.files[index], 'rb') as b:
             block_ = np.fromfile(b, dtype=np.float32).reshape(-1, 4)
         block = np.zeros_like(block_)
@@ -123,6 +121,7 @@ class SemanticKITTIInternal:
         block[:, 3] = block_[:, 3]
 
         # 读取label
+        # todo 注意除了装有bin文件的文件夹,在路径中不能有多个velodyne
         label_file = self.files[index].replace('velodyne', 'labels').replace('.bin', '.label')
         assert os.path.exists(label_file),f'the [{label_file}] doesn\'t exist.'
 
@@ -156,15 +155,17 @@ class SemanticKITTIInternal:
         # points_xyz是所有点的坐标
         # 求得voxel的坐标
         pc = np.round(points_xyz / self.voxel_size).astype(np.int32)
-        # 根据 x,y,z 分别最小的坐标值
+        # 根据 x,y,z 分别最小的坐标值,在之前已经进行了
         # pc -= pc.min(0, keepdims=1)
 
         # 这个函数并不改变pc,pc还是12000个
         _, inds, inverse_map = sparse_quantize(pc, return_index=True,
                                               return_inverse=True)
         # print(inds.shape)
-        # 在训练的时候将会剔除某些voxel,因此在这个过程中需要将voxel里面对应的点云也去掉
-        # 采用torchsparse来加速
+
+
+        # todo 在训练的时候将会剔除某些voxel,因此在这个过程中需要将voxel里面对应的点云也去掉
+        # todo 采用torchsparse来加速
         if self.mode == 'train':
             if len(inds) > self.max_voxels:
                 inds = np.random.choice(inds,self.max_voxels,replace=False)
@@ -188,7 +189,7 @@ class SemanticKITTIInternal:
                 # print(spa.shape)
                 # exit()
 
-        # todo 要不要裁剪点
+        # todo 要不要裁剪点,固定点的个数有助于将 px,py 变成一个规则的 tensor,加快 r2p
         # if self.point_valid_index.shape[0] > self.num_points :
         #     # 没有重复采样replace=False
         #     self.point_valid_index = np.random.choice(self.point_valid_index,self.num_points,replace=False)
@@ -207,8 +208,6 @@ class SemanticKITTIInternal:
                                feat[self.point_valid_index != -1]) \
                         if self.point_valid_index is not None else (points_xyz,label,feat)
 
-        # print(feat_.shape,coord_.shape,label_.shape,points_xyz.shape,label.shape)
-        # (80000, 4)(106616, 3)(106616, )(124231, 3)(124231, )
 
         # 这里存进去的坐标都是浮点数
         self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
@@ -241,7 +240,6 @@ class SemanticKITTIInternal:
 
         # 　https://blog.csdn.net/u013698770/article/details/54632047/
         # np.nonzero返回数组中的非零索引
-
         # 目的是找到64线的交接点,就是从 >0.8到<0.2的这个跳转点,因为是64线lidar,因此有64个点
         new_raw = np.nonzero((proj_x[1:] < 0.2) * (proj_x[:-1] > 0.8))[0] + 1
 
@@ -266,7 +264,6 @@ class SemanticKITTIInternal:
 
         proj_x = np.floor(proj_x).astype(np.int32)
         proj_y = np.floor(proj_y).astype(np.int32)
-        # print(proj_y.max())
 
         # order in decreasing depth
         # 使得深度从大到小排列,同一位置将会使用距离小的点的距离来填充
@@ -277,15 +274,13 @@ class SemanticKITTIInternal:
         proj_y = proj_y[order]
         proj_x = proj_x[order]
 
-        # 这里也需要对point进行排序,因为px,py是需要和point进行绑定的,从range到point过程中要对应
+        # todo 这里也需要对point进行排序,因为px,py是需要和point进行绑定的,从range到point过程中要对应
         # todo 疑似kprnet中有bug
-        # self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
-        # self.data['label'] = SparseTensor(feats=label_,coords=coord_)
-        # self.data['inverse_map'] = SparseTensor(feats=inverse_map,coords=points_xyz)
         self.data['lidar'].F = self.data['lidar'].F[order]
         self.data['lidar'].C = self.data['lidar'].C[order]
         self.data['label'].F = self.data['label'].F[order]
         self.data['label'].C = self.data['lidar'].C
+
         # 这里如果打榜提交数据要符合输入数据顺序我们才需要进行inverse_order的操作
         # self.data['inverse_order'] =
 
@@ -300,12 +295,6 @@ class SemanticKITTIInternal:
         depth_image = 25 * (proj_range - 0.4)
         refl_image = 20 * (proj_reflectivity - 0.5)
 
-        # import matplotlib.pyplot as plt
-        # plt.imshow(depth_image)
-        # plt.imshow(refl_image)
-        # plt.show()
-
-
 
         # 默认在channel维度进行拼接了
         range_image = np.stack([depth_image,refl_image]).astype(np.float32)
@@ -318,8 +307,6 @@ class SemanticKITTIInternal:
         self.data['image'] = range_image
         self.data['py'] = py
         self.data['px'] = px
-        # print(range_image.shape,py.shape,px.shape)
-        # (2, 64, 2048)(1, 103683)(1, 103683)
 
     @staticmethod
     def collate_fn(inputs):

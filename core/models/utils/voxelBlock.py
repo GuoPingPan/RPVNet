@@ -55,7 +55,7 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x):
         # todo 相加后经过relu和先经过relu再相加有什么区别吗
-        # 对于LeakyReLU肯定是有区别的
+        # 对于LeakyReLU由于有超参数是有区别的
         # 普通ReLU,似乎没有区别
         out = self.relu(self.net(x) + self.downsample(x))
         return out

@@ -12,7 +12,7 @@ def sparse_collate(inputs: List[SparseTensor]) -> SparseTensor:
     # 输入是一个同name的SparseTensor组成的列表,比如说batch_size个'laser'
     coords, feats = [], []
     stride = inputs[0].stride
-    # print(len(inputs)) 8
+
     for k, x in enumerate(inputs):
         # 转torch
         if isinstance(x.coords, np.ndarray):
@@ -32,13 +32,13 @@ def sparse_collate(inputs: List[SparseTensor]) -> SparseTensor:
                            dtype=torch.int)
         # 对每个coord加上在batch中的编号
         coords.append(torch.cat((x.coords, batch), dim=1))
-        #将特征组合在一起
+        # 将特征组合在一起
         feats.append(x.feats)
 
     # 根据点数n进行拼接
     coords = torch.cat(coords, dim=0)
     feats = torch.cat(feats, dim=0)
-    # 又重新放入SparseTensor,其实它并不发挥任何功能,只是充当一个容器
+    # 又重新放入SparseTensor,其实SparseTensor并不发挥任何功能,只是充当一个容器
     output = SparseTensor(coords=coords, feats=feats, stride=stride)
     return output
 
@@ -59,6 +59,7 @@ def sparse_collate_fn(inputs: List[Any]) -> Any:
             if isinstance(inputs[0][name], dict):
                 output[name] = sparse_collate_fn(
                     [input[name] for input in inputs])
+
             # 对px,py由于尺寸动态变化,因此单独处理
             # todo 加入到 sparsetensor 里面进行处理变尺度问题,但是需要最后一个维度为batch
             # todo 但这样会造成索引变慢

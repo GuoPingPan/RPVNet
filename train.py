@@ -19,25 +19,15 @@ def main(args):
     assert os.path.exists(args.data_cfg),(f'The dataset config [{args.data_cfg}] doesn\'t exist.')
 
 
-    # root,_ = os.path.split(os.path.abspath(__file__))
-    # if args.log is not None:
-    #     default= root + '/log/' + \
-    #              datetime.datetime.now().strftime("%Y-%-m-%d-%H:%M") + '/',
-    #     if os.path.exists(args.log) is None:
-    #         print(f'The log dir [{args.dataset}] doesn\'t exist, trying to use'
-    #               f'[{default}] as default, please input [y/n] to ensure.')
-    #         sig = input()
-    #         if sig in ['N','n']: exit()
-    #         else: args.log = default
-
     print('-----------------')
     print(f'dataset dir: {args.dataset}')
     print(f'log dir: {args.log}')
     print(f'model config: {args.model_cfg}')
     print(f'dataset config: {args.data_cfg}')
-    print(f'pretrained: {args.checkpoint}')
+    print(f'checkpoint: {args.checkpoint}')
     print('-----------------')
 
+    # load dataset config
     try:
         data_cfg = yaml.safe_load(open(args.data_cfg,'r'))
     except Exception as e:
@@ -45,6 +35,7 @@ def main(args):
         print("Error opening data yaml file.")
         quit()
 
+    # load model config
     try:
         model_cfg = yaml.safe_load(open(args.model_cfg,'r'))
     except Exception as e:
@@ -52,6 +43,7 @@ def main(args):
         print("Error opening model yaml file.")
         quit()
 
+    # create log dir for saving model
     if args.log is None:
         root,_ = os.path.split(os.path.abspath(__file__))
         default= root + '/log/' + \
@@ -73,20 +65,19 @@ def main(args):
                 sig = input()
                 if sig in ['Y', 'y']:
                     shutil.rmtree(args.log)
+                    os.mkdir(args.log)
                 else:
                     print(f'Check the log dir.')
                     quit()
-            os.mkdir(args.log)
 
-    # todo
+    # check if use pretrained model
     if args.checkpoint is not None:
         if os.path.isfile(args.checkpoint) and args.checkpoint.endwith('.ckpt'):
             print(f'Using the pretrained model:[{args.checkpoint}]')
 
 
-    # arg.device,arg.freeze_layers,args.log,args.pretrained
-    train = Trainer(model_cfg,data_cfg,args)
-    train.train()
+    trainer = Trainer(args=args,model_cfg=model_cfg,data_cfg=data_cfg)
+    trainer.train()
 
 
 
@@ -132,8 +123,8 @@ if __name__=='__main__':
     )
     parser.add_argument(
         '--device',
-        defalut='cpu',
-        help='device id (i.e. 0 or 0,1 or cpu)'
+        default='cpu',
+        help='device id (i.e. 0 or 0,1 or cuda)'
     )
 
     args,unparsed = parser.parse_known_args()

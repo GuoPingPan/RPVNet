@@ -58,7 +58,7 @@ class Block1Res(nn.Module):
         shortcut = self.act1(self.conv1(x))
 
         # todo 这里论文送入的是 shortcut,但代码送入的是x
-        #  todo 但确实contextblock的连线和这里的连线不太一样,可能是contextblock是作为stem,用来增加特征数量
+        # todo 但确实contextblock的连线和这里的连线不太一样,可能是contextblock是作为stem,用来增加特征数量
         cat1 = self.bn1(self.act2(self.conv2(x)))
         cat2 = self.bn2(self.act3(self.conv3(cat1)))
         cat3 = self.bn3(self.act4(self.conv4(cat2)))
@@ -104,13 +104,10 @@ class Block4(nn.Module):
         self.dropout = nn.Dropout2d(p=dropout_rate) if drop_out else nn.Identity()
 
     def forward(self,x,skip):
-        # print(skip.shape)
-        # print(x.shape)
+
         x = self.upscale(x)
-        # print(x.shape)
         x = self.dropout(x)
-        # print(x.shape)
-        # print(skip.shape)
+
         upcat = torch.concat([x,skip],dim=1)
         upcat = self.dropout(upcat)
 
