@@ -103,6 +103,11 @@ a = parser.parse_args()
 
 
 import torch
-m = torch.nn.Linear(1,1)
-a = torch.optim.SGD(m.parameters(),lr=0.1)
-print(a.name)
+# m = torch.nn.Linear(1,1)
+# a = torch.optim.SGD(m.parameters(),lr=0.1)
+# print(a.name)
+
+a = torch.rand(size=(3,4))
+print(a)
+print(torch.max(a,dim=1))
+print(a.max(dim=1))

@@ -28,17 +28,9 @@ class GFM(nn.Module):
 
     def forward(self,r,p,v,px,py):
 
-        # print(r.shape)
-        # print(p.F.shape,p.C.shape)
-        # print(v.F.shape,p.C.shape)
-        # print(px)
-        # print(py)
 
         v2p = voxel_to_point(v, p)
         r2p = range_to_point(r, px, py)
-        # print(v2p.shape)
-        # print(r2p.shape)
-
 
         r_weight = self.range_branch(r2p)
         p_weight = self.point_branch(p.F)
@@ -62,7 +54,6 @@ class GFM(nn.Module):
 
         return r,p,v
 
-# print(GFM(5))
 
 class RPVnet(nn.Module):
     def __init__(self,vsize=0.05,**kwargs):
@@ -107,8 +98,8 @@ class RPVnet(nn.Module):
                                  kernel_size=3,stride=1,dilation=1)
 
         self.dropout = Block2(dropout_rate=0.3,pooling=False,drop_out=True)
-        ''' range branch '''
 
+        ''' range branch '''
         self.range_stem = nn.Sequential(
             ResContextBlock(2,self.cs[0]),
             ResContextBlock(self.cs[0], self.cs[0]),
@@ -134,8 +125,6 @@ class RPVnet(nn.Module):
             Block1Res(self.cs[3],self.cs[4]),
             Block2(dropout_rate=0.2, pooling=True)
         )
-        # self.range_down4 = Block2(dropout_rate=0.2,pooling=True)
-
         # nn.GatFusionModule
 
         self.range_stage5 = Block4(self.cs[4],self.cs[5],self.cs[3],upscale_factor=2,dropout_rate=0.2)
@@ -191,26 +180,17 @@ class RPVnet(nn.Module):
                 nn.init.constant_(m.bias,0)
 
     def forward(self,lidar,image,py,px):
-        # print(lidar)
-        # print(image.shape)
-        # print(py)
-        # exit()
-        # print(px.shape)
-        # print(lidar.F)
-        # print(lidar.F.shape,lidar.F.dtype)
-        # print(lidar.C.shape,lidar.C.dtype)
+
         points = PointTensor(lidar.F,lidar.C.float())
         v0 = initial_voxelize(points,self.vsize)
-        # print(voxel.F.shape,voxel.C.shape)
-        # print(points.additional_features)
 
         ''' Fuse 1 '''
         v0 = self.voxel_stem(v0)
-        points.F = self.point_stem[0](points.F) #32
-        range0 = self.range_stem(image)
+        points.F = self.point_stem[0](points.F) # 32
+        range0 = self.range_stem(image) # n,32,64,2048
 
         range0,points,v0 = self.gfm_stem(range0,points,v0,px,py)
-        # temp = self.range_down1(range0) # 1,32,32,1024
+
         # todo 这里要不要加上dropout?
         # v0.F = self.dropout(v0.F)
 
@@ -219,21 +199,16 @@ class RPVnet(nn.Module):
         v2 = self.voxel_down2(v1) #128
         v3 = self.voxel_down3(v2) #256
         v4 = self.voxel_down4(v3) #256
-        points.F = self.point_stem[1](points.F)
-        range1 = self.range_stage1(range0) # 1,64,32,2048
-        # temp = self.range_stage1[1](range1)
-        range2 = self.range_stage2(range1) # 1,128,16,1024
-        # temp = self.range_stage2[1](range2)
-        range3 = self.range_stage3(range2) # 1,256,8,512
-        # temp = self.range_stage3[1](range3)
-        range4 = self.range_stage4(range3) # 1,256,4,256
+        points.F = self.point_stem[1](points.F)# 64
+        range1 = self.range_stage1(range0) # n,64,32,1024
+        range2 = self.range_stage2(range1) # n,128,16,512
+        range3 = self.range_stage3(range2) # n,256,8,256
+        range4 = self.range_stage4(range3) # n,256,4,128
 
         range4,points,v4 = self.gfm_stage4(range4,points,v4,px,py)
-        # range4 = self.range_down4(range4) # 1,256,4,128
         v4.F = self.dropout(v4.F)
 
         ''' Fuse 3 '''
-        # 严格来说v4输入进去经过bdb的输出才是v5
         v5 = self.voxel_up1(v4,v3)
         v6 = self.voxel_up2(v5,v2)
         points.F = self.point_stem[2](points.F)
@@ -257,14 +232,12 @@ class RPVnet(nn.Module):
         return out
 
 
-
-
-model = RPVnet(
-    cr=1,
-    vsize=0.05,
-    cs = [32,64,128,256,256,128,128,64,32],
-    num_classes=19
-)
+# model = RPVnet(
+#     cr=1,
+#     vsize=0.05,
+#     cs = [32,64,128,256,256,128,128,64,32],
+#     num_classes=19
+# )
 # print(model)
 # for name,param in model.named_parameters():
 #     if  'final' in name:

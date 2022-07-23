@@ -30,8 +30,7 @@ class Trainer():
         self.epochs = model_cfg['train']['epochs']
         self.mode = ['train','val','test']
         self.log_dir = args.log
-        self.device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-
+        self.device = args.device
 
         self.info = {
             'epochs': self.epochs,
@@ -46,7 +45,6 @@ class Trainer():
             "best_val_iou": 0
         }
 
-
         self.model = RPVnet(
             vsize=model_cfg['voxel_size'],
             cr=model_cfg['cr'],
@@ -56,9 +54,10 @@ class Trainer():
 
         self.criterion = getattr(nn,model_cfg['train']['loss'])(ignore_index=model_cfg['train']['ignore_index'])
         self.optimizer = getattr(optim,model_cfg['train']['optimizer'])(params=self.model.parameters(),lr=model_cfg['train']['lr'])
-        self.evaluator = MeanIoU(model_cfg['num_classes'],model_cfg['ignore_index'])
+        self.evaluator = MeanIoU(model_cfg['num_classes'],model_cfg['train']['ignore_index'])
+
         data = SemanticKITTIInternal(
-            root=args.dataset_dir,
+            root=args.dataset,
             voxel_size=data_cfg['voxel_size'],
             range_size=data_cfg['range_size'],
             sample_stride=data_cfg['sample_stride'],
@@ -75,7 +74,7 @@ class Trainer():
             self.info['epochs'] = self.epochs
             self.model.load_state_dict(state['state_dict'])
             self.optimizer.load_state_dict(state['optimizer'])
-            # self.load_static_dict()
+
         # todo
         # if args.freeze_layer:
         #     pass
@@ -83,11 +82,12 @@ class Trainer():
         nw = min([os.cpu_count(), self.batch_size, 8])
 
         if self.device == 'cpu':
-            self.gpus = None
+            self.gpus = 0
             self.dataloader = DataLoader(data,
                                          batch_size=self.batch_size,
                                          num_workers=nw,
-                                         collate_fn=data.collate_fn)
+                                         collate_fn=data.collate_fn,
+                                         shuffle=True)
 
         elif torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
@@ -98,7 +98,8 @@ class Trainer():
                 self.dataloader = DataLoader(data,
                                              batch_size=self.batch_size,
                                              num_workers=nw,
-                                             collate_fn=data.collate_fn)
+                                             collate_fn=data.collate_fn,
+                                             shuffle=True)
                 self.model.to(self.device)
             # 多卡
             elif torch.cuda.device_count() > 1:
@@ -136,6 +137,7 @@ class Trainer():
                     # todo
                     # if args.freeze_layer:
                     #     pass
+
                 # 这里的args.gpu应该是当前进程使用的gpu,而上面的device是'cuda'
                 self.model = torch.nn.parallel.DistributedDataParallel(self.model,device_ids=[args.gpu])
 
@@ -143,15 +145,7 @@ class Trainer():
 
 
     def save_checkpoint(self,state_dict,log,shuffix=''):
-        torch.save()
-
-
-    # def load_static_dict(self):
-    #     state_dict = torch.load(self.pretrained,map_location=self.device)
-    #     self.model.load_state_dict(state_dict['state_dict'],strict=True,)
-    #     self.optimizer.load_state_dict(state_dict['optimizer'])
-    #     self.info = state_dict['info']
-    #     print(f'info: {self.info}')
+        torch.save(state_dict,os.path.join(log,shuffix))
 
     def cleanup(self):
         dist.destroy_process_group()
@@ -159,11 +153,11 @@ class Trainer():
     def train(self):
 
         for epoch in range(self.epochs):
-            if self.device == 'cuda':
+            if self.gpus > 1:
                 # 这里会根据每个epoch生成不同的种子来打乱数据
                 self.sampler.set_epoch(epoch)
 
-            loss,iou,miou,acc = self.train_each_epoch()
+            loss,iou,miou,acc = self.train_each_epoch(epoch)
 
             if self.rank == 0:
                 print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
@@ -181,9 +175,9 @@ class Trainer():
                     'optimizer': self.optimizer.state_dict(),
                     'info': self.info
                 }
-                if (self.gpus > 1 and self.rank == 0):
+                if self.gpus <= 1:
                     self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
-                elif self.gpus == 1 or self.device == 'cpu':
+                elif self.rank == 0:
                     self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:3f}_cr{self.model.cr:2f}_vs{self.model.vsize:2f}.ckpt')
 
         self.cleanup()
@@ -226,9 +220,9 @@ class Trainer():
     def train_each_epoch(self,epoch):
 
 
-        if self.gpus > 1 and self.rank == 0:
+        if self.gpus <= 1:
             self.dataloader = tqdm(self.dataloader,file=sys.stdout)
-        elif self.gpus == 1 or self.device == 'cpu':
+        elif self.rank == 0:
             self.dataloader = tqdm(self.dataloader,file=sys.stdout)
 
         torch.cuda.empty_cache()
@@ -243,26 +237,29 @@ class Trainer():
             py,px = data['py'],data['px']
 
             # 因为pin_memory已将数据放到gpu中
-            if self.gpus:
-                lidar.cuda(),label.cuda(),image.cuda()
-                for x in px: x.cuda()
-                for y in py: y.cuda()
+            if self.gpus >= 1:
+                lidar,label,image = lidar.cuda(),label.cuda(),image.cuda()
+                px = [x.cuda() for x in px]
+                py = [y.cuda() for y in py]
 
             outputs = self.model(lidar,image,py,px)
 
             loss = self.criterion(outputs,label.F.long())
             loss.backward()
 
-            loss = self.reduce_value(loss,average=True)
+            if (self.gpus > 1 and self.rank == 0):
+                loss = self.reduce_value(loss,average=True)
             mean_loss = (mean_loss*batch + loss.detach()) / (batch + 1)
-            iou,miou,acc = self.evaluator(outputs,label.F.long())
+            iou,miou,acc = self.evaluator(outputs.max(dim=1)[1],label.F.long())
 
             assert torch.isfinite(loss),f'ERROR: non-finite loss, ending training! {loss}'
 
-            if self.rank == 0:
+            if self.gpus <= 1:
                 print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
                       f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
-
+            elif self.rank == 0:
+                print(f'Epoch:[{epoch:>3d}/{self.epochs:>3d}]'
+                      f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
 
             self.optimizer.step()
             self.optimizer.zero_grad()
