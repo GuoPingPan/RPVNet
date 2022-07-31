@@ -59,6 +59,9 @@ image = int_out['image']
 py = int_out['py']
 px = int_out['px']
 
+# print(py.shape)
+# exit()
+
 model = RPVnet(
     cr=1,
     vsize=0.05,

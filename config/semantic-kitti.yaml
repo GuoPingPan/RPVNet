@@ -66,6 +66,7 @@ range_size:
   - 2048 # W
 sample_stride: 1
 max_voxels: 84000
+max_points: 100000
 
 split:
   train:

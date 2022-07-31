@@ -27,6 +27,7 @@ class SemanticKITTIInternal:
                  range_size = None,
                  sample_stride=1,
                  submit=False,
+                 max_points = 100000,
                  **kwargs):
 
         self.root = root
@@ -36,6 +37,8 @@ class SemanticKITTIInternal:
         self.max_voxels = max_voxels
         self.sample_stride = sample_stride
         self.mode = mode
+        self.max_points = max_points
+
 
         # 如果提交则加上val一起进行训练
         if submit:
@@ -190,9 +193,21 @@ class SemanticKITTIInternal:
                 # exit()
 
         # todo 要不要裁剪点,固定点的个数有助于将 px,py 变成一个规则的 tensor,加快 r2p
-        # if self.point_valid_index.shape[0] > self.num_points :
-        #     # 没有重复采样replace=False
-        #     self.point_valid_index = np.random.choice(self.point_valid_index,self.num_points,replace=False)
+        if self.point_valid_index.shape[0] > self.max_points :
+            # 没有重复采样replace=False
+            # print('yes')
+
+            coord_, label_, feat_ = (points_xyz[self.point_valid_index != -1],
+                                     label[self.point_valid_index != -1],
+                                     feat[self.point_valid_index != -1]) \
+                if self.point_valid_index is not None else (points_xyz, label, feat)
+
+
+
+            coord_ = coord_[:self.max_points]
+            label_ = label_[:self.max_points]
+            feat_ = feat_[:self.max_points]
+
         #
         # print(self.point_valid_index)
         # self.point_valid_index = set(self.point_valid_index)
@@ -202,11 +217,6 @@ class SemanticKITTIInternal:
         # print(self.point_valid_index != -1)
 
 
-
-        coord_,label_,feat_ = (points_xyz[self.point_valid_index != -1],
-                               label[self.point_valid_index != -1],
-                               feat[self.point_valid_index != -1]) \
-                        if self.point_valid_index is not None else (points_xyz,label,feat)
 
 
         # 这里存进去的坐标都是浮点数
@@ -220,10 +230,16 @@ class SemanticKITTIInternal:
     def do_range_projection(self,points_xyz, points_refl):
 
         H,W = self.range_size if self.range_size is not None else (64,2048)
-
+        # print(self.point_valid_index)
+        # print(points_xyz)
         points_xyz,points_refl = (points_xyz[self.point_valid_index != -1],
                                   points_refl[self.point_valid_index != -1]) \
                      if self.point_valid_index is not None else (points_xyz,points_refl)
+
+        points_xyz = points_xyz[:self.max_points]
+        points_refl = points_refl[:self.max_points]
+        # print(self.point_list.max())
+        # print(points_xyz.shape)
 
         # 计算每个点的模长作为深度
         depth = np.linalg.norm(points_xyz,2,axis=1)
@@ -232,6 +248,7 @@ class SemanticKITTIInternal:
         scan_x = points_xyz[:, 0]
         scan_y = points_xyz[:, 1]
         scan_z = points_xyz[:, 2]
+        # print(scan_x.shape)
 
         # get angles of all points
         yaw = -np.arctan2(scan_y, -scan_x)
@@ -251,6 +268,7 @@ class SemanticKITTIInternal:
 
         # 累加求得每个点在哪条线上
         proj_y = np.cumsum(proj_y)
+        # print(proj_y.max())
         # todo 如何去解决旋转会导致索引越界
         # print(np.where(proj_y>=65.0))
 

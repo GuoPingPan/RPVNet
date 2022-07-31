@@ -142,36 +142,47 @@ def range_to_point(x,px,py):
 
     r2p = []
 
-    # todo 这里要是想快点只能是进行固定训练点的数量
-    # t1 = time.time() #0.01*batch_size
-    for batch,(p_x,p_y) in enumerate(zip(px,py)):
-        pypx = torch.stack([p_x,p_y],dim=2).to(px[0].device)
-        # print(pypx.shape,x.shape) # torch.Size([1, 111338, 2]) torch.Size([1, 32, 64, 2048])
-        resampled = grid_sample(x[batch].unsqueeze(0),pypx.unsqueeze(0))
-        # print(resampled.shape) # torch.Size([1, 32, 1, 111338])
-        r2p.append(resampled.squeeze().permute(1,0))
-        # print(resampled.squeeze().permute(1,0).shape)
+    pxpy = torch.stack([px,py],dim=-1).to(px.device)
+    # print(pxpy.shape)
+    # print(x.shape)
 
-    # print(time.time()-t1) # 0.2s batch=12
+    resampled = grid_sample(x,pxpy)
+    # print(resampled.shape)
+
+    p = resampled.squeeze().permute(2,0,1).flatten(0,1)
+    # print(p.shape)
     # exit()
-    # stack和concat的区别就是是否会增加新的特征维度,stack则是在指定的dim增加一个新的维度
-    return torch.concat(r2p,dim=0)
+
+    return p
 
 
 def point_to_range(range_shape,pF,px,py):
     H, W = range_shape
-    cnt = 0
+    cnt = 100000
     r = []
     # t1 = time.time()
-    for batch,(p_x,p_y) in enumerate(zip(px,py)):
-        image = torch.zeros(size=(H,W,pF.shape[1]))
-        p_x = torch.floor((p_x/2. + 0.5) * W).long()
-        p_y = torch.floor((p_y/2. + 0.5) * H).long()
-        image[p_y,p_x] = pF[cnt:cnt+p_x.shape[1]]
-
-        r.append(image.permute(2,0,1))
-        cnt += p_x.shape[1]
-    # print(time.time()-t1) # 0.03s batch=12
+    pxpy = torch.concat([px,py],dim=1).to(px.device).permute(0,2,1).long()
+    img = torch.zeros(size=(px.shape[0],H,W,pF.shape[1]))
+    feat = torch.Tensor(pF).view(px.shape[0],cnt,-1)
+    # print(feat.shape)
+    # print(pxpy.shape)
+    # print(pxpy[0,:][:,0].shape)
+    for i in range(px.shape[0]):
+        img[i,pxpy[i,:][:,0],pxpy[i,:][:,1]] = feat[i]
+    # print(img.shape)
     # exit()
-    return torch.stack(r,dim=0).to(px[0].device)
+
+
+
+    # for batch,(p_x,p_y) in enumerate(zip(px,py)):
+    #     image = torch.zeros(size=(H,W,pF.shape[1]))
+    #     p_x = torch.floor((p_x/2. + 0.5) * W).long()
+    #     p_y = torch.floor((p_y/2. + 0.5) * H).long()
+    #     image[p_y,p_x] = pF[cnt:cnt+p_x.shape[1]]
+    #
+    #     r.append(image.permute(2,0,1))
+    #     cnt += p_x.shape[1]
+    # # print(time.time()-t1) # 0.03s batch=12
+    # # exit()
+    return img.permute(0,3,1,2)
 

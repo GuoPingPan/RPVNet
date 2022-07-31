@@ -63,8 +63,8 @@ def sparse_collate_fn(inputs: List[Any]) -> Any:
             # 对px,py由于尺寸动态变化,因此单独处理
             # todo 加入到 sparsetensor 里面进行处理变尺度问题,但是需要最后一个维度为batch
             # todo 但这样会造成索引变慢
-            elif name in ['px','py']:
-                output[name] = [torch.from_numpy(input[name]) for input in inputs]
+            # elif name in ['px','py']:
+            #     output[name] = [torch.from_numpy(input[name]) for input in inputs]
 
             # todo 1这里device
             # elif name == 'device':
