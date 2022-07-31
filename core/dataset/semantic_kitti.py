@@ -273,15 +273,6 @@ class SemanticKITTIInternal:
         proj_y = proj_y[order]
         proj_x = proj_x[order]
 
-        # todo 这里也需要对point进行排序,因为px,py是需要和point进行绑定的,从range到point过程中要对应
-        # todo 疑似kprnet中有bug
-        self.data['lidar'].F = self.data['lidar'].F[order]
-        self.data['lidar'].C = self.data['lidar'].C[order]
-        self.data['label'].F = self.data['label'].F[order]
-        self.data['label'].C = self.data['lidar'].C
-
-        # 这里如果打榜提交数据要符合输入数据顺序我们才需要进行inverse_order的操作
-        # self.data['inverse_order'] =
 
         proj_range = np.zeros((H, W))
         # 逆深度

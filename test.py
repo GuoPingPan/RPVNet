@@ -43,7 +43,7 @@ dataloader = DataLoader(data,
                              batch_size=2,
                              num_workers=4,
                              collate_fn=data.collate_fn,
-                             shuffle=True)
+                             shuffle=False)
 #
 int_out = data.__getitem__(1)
 int_out = data.collate_fn([int_out])
@@ -66,7 +66,11 @@ model = RPVnet(
     num_classes=19
 )
 # t1 = time.time()
-out = model(lidar,image,py,px)
+for i in range(5):
+    out = model(lidar,image,py,px)
+    print('*'*100)
+print('*'*100)
+out = model(lidar, image, py, px)
 
 # flops,params = profile(model,(lidar,image,py,px))
 # print('flops: ', flops, 'params: ', params)
