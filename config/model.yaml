@@ -1,0 +1,27 @@
+name: "rpvnet"
+
+num_classes: 19
+voxel_size: 0.05 # m
+dimension_of_stages:
+  - 32 # point mlp 1
+  - 64
+  - 128
+  - 256
+  - 256 # point mlp 2
+  - 128
+  - 128 # point mlp 3
+  - 64
+  - 32 # point mlp 4
+
+cr: 1
+
+
+train:
+  batch_size: 1
+  gpus: 2
+  lr: 0.24
+  loss: 'CrossEntropyLoss'
+  optimizer: 'SGD'
+  epochs: 2
+  ignore_index: 255
+

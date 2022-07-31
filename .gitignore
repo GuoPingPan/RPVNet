@@ -1,0 +1,13 @@
+
+.idea
+__pycache__
+log
+*/__pycache__
+
+test.py
+check_little_thing.py
+kept_delete.py
+save.ckpt
+semantic-kitti.yaml
+main.py
+
