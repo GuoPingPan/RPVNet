@@ -183,147 +183,59 @@ class RPVnet(nn.Module):
 
     def forward(self,lidar,image,py,px):
 
-        t0 = time.time()
-
         points = PointTensor(lidar.F,lidar.C.float())
 
-        t1 = time.time()
         v0 = initial_voxelize(points,self.vsize)
-        print('init_voxel',time.time()-t1)
 
         ''' Fuse 1 '''
-        t1 = time.time()
         v0 = self.voxel_stem(v0)
-        print('stem v',time.time()-t1)
-
-        t1 = time.time()
         points.F = self.point_stem[0](points.F) # 32
-        print('stem p',time.time()-t1)
-
-
-        t1 = time.time()
         range0 = self.range_stem(image) # n,32,64,2048
-        print('stem r',time.time()-t1)
 
-
-        t1 = time.time()
         range0,points,v0 = self.gfm_stem(range0,points,v0,px,py)
-        print('gfm stem',time.time()-t1)
 
         # todo 这里要不要加上dropout?
         # v0.F = self.dropout(v0.F)
 
         ''' Fuse 2 '''
-        t1 = time.time()
         v1 = self.voxel_down1(v0) #64
-        print('vd1',time.time()-t1)
-
-        t1 = time.time()
         v2 = self.voxel_down2(v1) #128
-        print('vd2',time.time()-t1)
-
-        t1 = time.time()
         v3 = self.voxel_down3(v2) #256
-        print('vd3',time.time()-t1)
-
-        t1 = time.time()
         v4 = self.voxel_down4(v3) #256
-        print('vd4',time.time()-t1)
 
-        t1 = time.time()
         points.F = self.point_stem[1](points.F)# 64
-        print('p1',time.time()-t1)
 
-        t1 = time.time()
         range1 = self.range_stage1(range0) # n,64,32,1024
-        print('rd1',time.time()-t1)
-
-        t1 = time.time()
         range2 = self.range_stage2(range1) # n,128,16,512
-        print('rd2',time.time()-t1)
-
-        t1 = time.time()
         range3 = self.range_stage3(range2) # n,256,8,256
-        print('rd3',time.time()-t1)
-
-        t1 = time.time()
         range4 = self.range_stage4(range3) # n,256,4,128
-        print('rd4',time.time()-t1)
 
-        t1 = time.time()
         range4,points,v4 = self.gfm_stage4(range4,points,v4,px,py)
-        print('gfm 1',time.time()-t1)
-
         v4.F = self.dropout(v4.F)
 
         ''' Fuse 3 '''
-        t1 = time.time()
         v5 = self.voxel_up1(v4,v3)
-        print('vu 1',time.time()-t1)
-
-        t1 = time.time()
         v6 = self.voxel_up2(v5,v2)
-        print('vu 2',time.time()-t1)
 
-        t1 = time.time()
         points.F = self.point_stem[2](points.F)
-        print('p2',time.time()-t1)
 
-        t1 = time.time()
         range5 = self.range_stage5(range4,range3)
-        print('ru 1',time.time()-t1)
-
-        t1 = time.time()
         range6 = self.range_stage6(range5,range2)
-        print('ru 2',time.time()-t1)
 
-        t1 = time.time()
         range6,points,v6 = self.gfm_stage6(range6,points,v6,px,py)
-        print('gfm 6',time.time()-t1)
-
         v6.F = self.dropout(v6.F)
 
         ''' Fuse 4 '''
-        t1 = time.time()
         v7 = self.voxel_up3(v6,v1)
-        print('vu 3',time.time()-t1)
-
-        t1 = time.time()
         v8 = self.voxel_up4(v7,v0)
-        print('vu 4',time.time()-t1)
 
-        t1 = time.time()
         points.F = self.point_stem[3](points.F)
-        print('p3',time.time()-t1)
 
-        t1 = time.time()
         range7 = self.range_stage7(range6,range1)
-        print('ru 3',time.time()-t1)
-
-        t1 = time.time()
         range8 = self.range_stage8(range7,range0)
-        print('ru 4',time.time()-t1)
 
-        t1 = time.time()
         range8,points,v8 = self.gfm_stage8(range8,points,v8,px,py)
-        print('gfm 8',time.time()-t1)
 
-        t1 = time.time()
         out = self.final(points.F)
-        print('final',time.time()-t1)
 
-        print('total',time.time()-t0)
         return out
-
-
-# model = RPVnet(
-#     cr=1,
-#     vsize=0.05,
-#     cs = [32,64,128,256,256,128,128,64,32],
-#     num_classes=19
-# )
-# print(model)
-
-# for name,param in model.named_parameters():
-#     if  'final' in name:
-#         print(name)

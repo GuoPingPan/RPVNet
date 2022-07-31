@@ -7,7 +7,6 @@ import torch
 from torchsparse import SparseTensor
 from torchsparse.utils.quantize import sparse_quantize
 import torchsparse.nn.functional as F
-# from torchsparse.utils.collate import sparse_collate_fn
 
 from core.dataset.collate import sparse_collate_fn
 
@@ -151,18 +150,17 @@ class SemanticKITTIInternal:
         return self.data
 
     def do_voxel_projection(self,feat,points_xyz, label):
+        #                             points_xyz是所有点的坐标
 
-        # points_xyz是所有点的坐标
         # 求得voxel的坐标
         pc = np.round(points_xyz / self.voxel_size).astype(np.int32)
+
         # 根据 x,y,z 分别最小的坐标值,在之前已经进行了
         # pc -= pc.min(0, keepdims=1)
 
         # 这个函数并不改变pc,pc还是12000个
         _, inds, inverse_map = sparse_quantize(pc, return_index=True,
                                               return_inverse=True)
-        # print(inds.shape)
-
 
         # todo 在训练的时候将会剔除某些voxel,因此在这个过程中需要将voxel里面对应的点云也去掉
         # todo 采用torchsparse来加速
@@ -178,30 +176,10 @@ class SemanticKITTIInternal:
 
                 self.point_valid_index = F.sphashquery(old_hash,sparse_hash)
 
-                # 测试为什么点的很少,因为一个除了voxel,一个没除
-                # print(self.point_valid_index[self.point_valid_index!=-1].shape)
-                # points_xyz = points_xyz[self.point_valid_index!=-1]
-                # print(points_xyz.shape)
-                # new_float_coord = torch.cat(
-                #     [(torch.from_numpy(points_xyz)) / 0.05, torch.zeros(size=(points_xyz.shape[0],1))], 1)
-                # pc_hash = F.sphash(torch.floor(new_float_coord).int())
-                # spa = torch.unique(pc_hash)
-                # print(spa.shape)
-                # exit()
 
-        # todo 要不要裁剪点,固定点的个数有助于将 px,py 变成一个规则的 tensor,加快 r2p
+        # todo 固定点的个数有助于将 px,py 变成一个规则的 tensor,加快 r2p,p2r
         # if self.point_valid_index.shape[0] > self.num_points :
-        #     # 没有重复采样replace=False
-        #     self.point_valid_index = np.random.choice(self.point_valid_index,self.num_points,replace=False)
-        #
-        # print(self.point_valid_index)
-        # self.point_valid_index = set(self.point_valid_index)
-        # print(self.point_valid_index)
-        # self.point_valid_index.remove(0)
-
-        # print(self.point_valid_index != -1)
-
-
+        #     pass
 
         coord_,label_,feat_ = (points_xyz[self.point_valid_index != -1],
                                label[self.point_valid_index != -1],
@@ -212,9 +190,6 @@ class SemanticKITTIInternal:
         # 这里存进去的坐标都是浮点数
         self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
         self.data['label'] = SparseTensor(feats=label_,coords=coord_)
-        # self.data['target_mapped'] = SparseTensor(feats=label,coords=points_xyz)
-        # self.data['inverse_map'] = SparseTensor(feats=inverse_map,coords=points_xyz)
-
 
 
     def do_range_projection(self,points_xyz, points_refl):
@@ -238,15 +213,11 @@ class SemanticKITTIInternal:
         proj_x = 0.5 * (yaw / np.pi + 1.0)  # in [0.0, 1.0]
 
 
-        # 　https://blog.csdn.net/u013698770/article/details/54632047/
-        # np.nonzero返回数组中的非零索引
+
+        # np.nonzero返回数组中的非零索引 [https://blog.csdn.net/u013698770/article/details/54632047/]
         # 目的是找到64线的交接点,就是从 >0.8到<0.2的这个跳转点,因为是64线lidar,因此有64个点
         new_raw = np.nonzero((proj_x[1:] < 0.2) * (proj_x[:-1] > 0.8))[0] + 1
-
-        # 对于每个点都给定对应的位置
         proj_y = np.zeros_like(proj_x)
-
-        # 对应位置赋1
         proj_y[new_raw] = 1
 
         # 累加求得每个点在哪条线上
@@ -301,68 +272,11 @@ class SemanticKITTIInternal:
     @staticmethod
     def collate_fn(inputs):
         '''
-        self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
-        self.data['label'] = SparseTensor(feats=label_,coords=coord_)
-        self.data['filename'] = self.files[index]
-        self.data['image'] = range_image
-        self.data['py'] = py
-        self.data['px'] = px
+            self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
+            self.data['label'] = SparseTensor(feats=label_,coords=coord_)
+            self.data['filename'] = self.files[index]
+            self.data['image'] = range_image
+            self.data['py'] = py
+            self.data['px'] = px
         '''
         return sparse_collate_fn(inputs)
-
-'''-------------------------------------------------------------------------------'''
-# import yaml
-# data_cfg = yaml.safe_load(open('../../config/semantic-kitti.yaml', 'r'))
-# #
-# data = SemanticKITTIInternal(
-#     root='/home/pgp/xialingying/dataset',
-#     voxel_size=data_cfg['voxel_size'],
-#     range_size=data_cfg['range_size'],
-#     sample_stride=data_cfg['sample_stride'],
-#     split=data_cfg['split']['train'],
-#     max_voxels=data_cfg['max_voxels'],
-#     label_name_mapping=data_cfg['label_name_mapping'],
-#     kept_labels=data_cfg['kept_labels']
-# )
-# #
-# int_out = data.__getitem__(1)
-# int_out = data.collate_fn([int_out])
-#
-# lidar = int_out['lidar']
-# image = int_out['image']
-# label = int_out['label']
-# py = int_out['py']
-# px = int_out['px']
-#
-# print(lidar.F.shape,lidar.C.shape)
-# print(label.F.shape,label.C.shape)
-# print(np.where(label.F!=255))
-#
-# from core.models.rpvnet import RPVnet
-#
-# model = RPVnet(
-#     cr=1,
-#     vsize=0.05,
-#     cs = [32,64,128,256,256,128,128,64,32],
-#     num_classes=19
-# )
-#
-# loss_fn = torch.nn.CrossEntropyLoss(ignore_index=255)
-#
-# out = model(lidar,image,py,px)
-# loss = loss_fn(out,label.F.long())
-# print(loss)
-
-
-
-# print(np.where(int_out['label'].F!=255))
-# # lidar,label,image,px,py,device = int_out
-# # print(lidar)
-# dataloader = torch.utils.data.DataLoader(
-#     data,
-#     batch_size=2,
-#     collate_fn=data.collate_fn
-# )
-
-# inputs = next(iter(dataloader))
-# print(inputs)

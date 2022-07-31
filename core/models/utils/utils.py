@@ -22,15 +22,12 @@ def initial_voxelize(z: PointTensor, after_res) -> SparseTensor:
     # 使用 pybind11 将hash模块利用c++实现
     # todo 这里将floor改成了round
     pc_hash = F.sphash(torch.round(new_float_coord).int())
-    # print(pc_hash.shape,new_float_coord.shape)
 
-    # 将其变成唯一的 hash,只有唯一的voxel编码
+    # 将其变成唯一的hash,获得唯一的voxel坐标
     sparse_hash = torch.unique(pc_hash)
-    # print(pc_hash.shape,sparse_hash.shape)
 
     # 获得pc_hash在sparse_hash中的index
     idx_query = F.sphashquery(pc_hash, sparse_hash)
-    # print(idx_query)
 
     # 这里是对idx_query中从0开始计数
     # tensor([2, 0, 0, 0, 1, 2, 2, 2, 4, 3, 2])
@@ -39,9 +36,8 @@ def initial_voxelize(z: PointTensor, after_res) -> SparseTensor:
 
 
     # 按照idx_query的0,1,2...选出对应的voxel
-    # 这里已经将所有在同一个voxel里面的点都加和取平均了,其实这一步感觉可以加速,因为落在同一个voxel的点其坐标都一样
-    inserted_coords = F.spvoxelize(torch.round(new_float_coord), idx_query,
-                                   counts)
+    # 这里已经将所有在同一个voxel里面的点都加和取平均了,其实这一步感觉可以加速,因为落在同一个voxel的点其坐标经voxelize后都一样
+    inserted_coords = F.spvoxelize(torch.round(new_float_coord), idx_query,counts)
 
     # 转成 int
     inserted_coords = torch.round(inserted_coords).int()
@@ -49,12 +45,12 @@ def initial_voxelize(z: PointTensor, after_res) -> SparseTensor:
     # feature也挑选出来
     # 这里已经将所有在同一个voxel里面的点的feature都加和取平均了
     inserted_feat = F.spvoxelize(z.F, idx_query, counts)
-    # print('feat',inserted_feat.shape)
 
     new_tensor = SparseTensor(inserted_feat, inserted_coords, 1)
 
     # 根据坐标上色
     new_tensor.cmaps.setdefault((1,1,1), new_tensor.coords)
+
     # 将对应的索引存到point中
     z.additional_features['idx_query'][(1,1,1)] = idx_query
     z.additional_features['counts'][(1,1,1)] = counts
@@ -120,7 +116,7 @@ def voxel_to_point(x: SparseTensor,z: PointTensor, nearest=False) -> torch.Tenso
 
         idx_query = idx_query.transpose(0, 1).contiguous()
 
-        # 最近邻插值只考虑点所落在的voxel里面,会带来一个弊端就是同一个grid中所有的point都共享相同的一个权重
+        # 这里并不使用,最近邻插值只考虑点所落在的voxel里面,会带来一个弊端就是同一个grid中所有的point都共享相同的一个权重
         if nearest:
             weights[:, 1:] = 0.
             idx_query[:, 1:] = -1
@@ -130,7 +126,7 @@ def voxel_to_point(x: SparseTensor,z: PointTensor, nearest=False) -> torch.Tenso
         new_feat = F.spdevoxelize(x.F, idx_query, weights)
 
         if x.s == (1,1,1):
-            # 这个idx_query和additional_features中的idx_query是不一样的,这里是八个点
+            # 这个idx_query和additional_features中的idx_query是不一样的,这里是八个voxel的idx_query
             z.idx_query[x.s] = idx_query
             z.weights[x.s] = weights
     else:
@@ -142,7 +138,7 @@ def range_to_point(x,px,py):
 
     r2p = []
 
-    # todo 这里要是想快点只能是进行固定训练点的数量
+    # todo 这里要是想快点只能是进行固定训练点的数量 [经测试有一定速度提升,不是非常明显]
     # t1 = time.time() #0.01*batch_size
     for batch,(p_x,p_y) in enumerate(zip(px,py)):
         pypx = torch.stack([p_x,p_y],dim=2).to(px[0].device)
@@ -153,7 +149,7 @@ def range_to_point(x,px,py):
         # print(resampled.squeeze().permute(1,0).shape)
 
     # print(time.time()-t1) # 0.2s batch=12
-    # exit()
+
     # stack和concat的区别就是是否会增加新的特征维度,stack则是在指定的dim增加一个新的维度
     return torch.concat(r2p,dim=0)
 
@@ -172,6 +168,5 @@ def point_to_range(range_shape,pF,px,py):
         r.append(image.permute(2,0,1))
         cnt += p_x.shape[1]
     # print(time.time()-t1) # 0.03s batch=12
-    # exit()
     return torch.stack(r,dim=0).to(px[0].device)
 

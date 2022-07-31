@@ -59,6 +59,8 @@ image = int_out['image']
 py = int_out['py']
 px = int_out['px']
 
+print(lidar.F.shape)
+
 model = RPVnet(
     cr=1,
     vsize=0.05,

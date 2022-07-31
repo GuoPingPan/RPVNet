@@ -44,14 +44,11 @@ def sparse_collate(inputs: List[SparseTensor]) -> SparseTensor:
 
 
 def sparse_collate_fn(inputs: List[Any]) -> Any:
-    # print(inputs)
+
     # inputs是一个列表[]中装着dataset中__getitem__得到的batch_size个数据
-    # 如batch_size=8 [{'laser':torchsparse.tensor.SparseTensor,...},...*8个]
+    # 如batch_size=8 [{'laser':torchsparse.tensor.SparseTensor,...},...] {}*8个
 
-    # todo 2这里device
-    # device = inputs[0].get('device')
-
-    # 如果输入是一个 dict则遍历所有的key,value,否则直接输出
+    # 如果输入是一个 dict 则遍历所有的key,value,否则直接输出
     if isinstance(inputs[0], dict):
         output = {}
         for name in inputs[0].keys():
@@ -61,14 +58,9 @@ def sparse_collate_fn(inputs: List[Any]) -> Any:
                     [input[name] for input in inputs])
 
             # 对px,py由于尺寸动态变化,因此单独处理
-            # todo 加入到 sparsetensor 里面进行处理变尺度问题,但是需要最后一个维度为batch
-            # todo 但这样会造成索引变慢
+            # todo 加入到 SparseTensor 里面进行处理变尺度问题,但是需要最后一个维度为batch,但这样会造成索引变慢
             elif name in ['px','py']:
                 output[name] = [torch.from_numpy(input[name]) for input in inputs]
-
-            # todo 1这里device
-            # elif name == 'device':
-            #     pass
 
             # 如果是一个np,输入中所有的相同name(key)的输入进行拼接
             elif isinstance(inputs[0][name], np.ndarray):
@@ -79,7 +71,8 @@ def sparse_collate_fn(inputs: List[Any]) -> Any:
             elif isinstance(inputs[0][name], torch.Tensor):
                 output[name] = torch.stack([input[name] for input in inputs],
                                            dim=0)
-            # 如果是SparseTensor则调用自己的函数处理
+
+            # 如果是SparseTensor则调用自定义的函数处理
             elif isinstance(inputs[0][name], SparseTensor):
                 output[name] = sparse_collate([input[name] for input in inputs])
             else:

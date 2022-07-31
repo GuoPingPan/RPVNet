@@ -175,17 +175,17 @@ class Trainer():
                 self.info['train_iou'] = iou
                 self.info['best_train_iou'] =miou
 
-                # if epoch % 10 == 0:
-            state_dict = {
-                'state_dict': self.model.state_dict(),
-                'info': self.info
-            }
-            if self.gpus <= 1 or self.rank == 0:
-                self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:.3f}_'
-                                                                     f'e{int(epoch)}_'
-                                                                     f'cr{self.model.cr:.2f}_'
-                                                                     f'vs{self.model.vsize:.2f}_'
-                                                                     f'g{self.gpus:1d}.ckpt')
+                if epoch % 10 == 0:
+                    state_dict = {
+                        'state_dict': self.model.state_dict(),
+                        'info': self.info
+                    }
+                    if self.gpus <= 1 or self.rank == 0:
+                        self.save_checkpoint(state_dict,self.log_dir,shuffix=f'rpvnet_m{miou:.3f}_'
+                                                                             f'e{int(epoch)}_'
+                                                                             f'cr{self.model.cr:.2f}_'
+                                                                             f'vs{self.model.vsize:.2f}_'
+                                                                             f'g{self.gpus:1d}.ckpt')
 
         if self.gpus > 1:
             self.cleanup()
