@@ -152,8 +152,8 @@ def range_to_point(x,px,py):
         r2p.append(resampled.squeeze().permute(1,0))
         # print(resampled.squeeze().permute(1,0).shape)
 
-    # print(time.time()-t1)
-
+    # print(time.time()-t1) # 0.2s batch=12
+    # exit()
     # stack和concat的区别就是是否会增加新的特征维度,stack则是在指定的dim增加一个新的维度
     return torch.concat(r2p,dim=0)
 
@@ -162,6 +162,7 @@ def point_to_range(range_shape,pF,px,py):
     H, W = range_shape
     cnt = 0
     r = []
+    # t1 = time.time()
     for batch,(p_x,p_y) in enumerate(zip(px,py)):
         image = torch.zeros(size=(H,W,pF.shape[1]))
         p_x = torch.floor((p_x/2. + 0.5) * W).long()
@@ -170,6 +171,7 @@ def point_to_range(range_shape,pF,px,py):
 
         r.append(image.permute(2,0,1))
         cnt += p_x.shape[1]
-
+    # print(time.time()-t1) # 0.03s batch=12
+    # exit()
     return torch.stack(r,dim=0).to(px[0].device)
 
