@@ -135,7 +135,7 @@ class SemanticKITTIInternal:
         # print(np.where(labels_==255))
 
         points_xyz = block[:,:3]
-        # 根据 x,y,z 分别最小的坐标值
+        # 根据 x,y,z 分别减去最小的坐标值
         points_xyz_norm = points_xyz - points_xyz.min(0,keepdims=1)
 
         points_refl = block[:,3]
@@ -235,6 +235,9 @@ class SemanticKITTIInternal:
         proj_x = np.floor(proj_x).astype(np.int32)
         proj_y = np.floor(proj_y).astype(np.int32)
 
+        ''' 
+        v1: using the closet point's depth 
+        
         # order in decreasing depth
         # 使得深度从大到小排列,同一位置将会使用距离小的点的距离来填充
         order = np.argsort(depth)[::-1]
@@ -251,6 +254,25 @@ class SemanticKITTIInternal:
 
         proj_reflectivity = np.zeros((H, W))
         proj_reflectivity[proj_y, proj_x] = reflectivity
+
+        '''
+
+        ''' 
+        v2: using the average points' depth 
+        '''
+        proj_range = np.zeros((H,W)) + 1e-5
+        proj_cumsum = np.zeros((H,W)) + 1e-5
+        proj_reflectivity = np.zeros((H, W))
+        proj_range[proj_y,proj_x] += depth
+        proj_cumsum[proj_y,proj_x] += 1
+        proj_reflectivity[proj_y, proj_x] += points_refl
+
+
+        # inverse depth
+        proj_range = proj_cumsum / proj_range
+
+        proj_reflectivity = proj_reflectivity / proj_cumsum
+
 
         # nomalize values to -10 and 10
         depth_image = 25 * (proj_range - 0.4)

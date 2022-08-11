@@ -22,6 +22,6 @@ train:
   lr: 0.24
   loss: 'CrossEntropyLoss'
   optimizer: 'SGD'
-  epochs: 2
+  epochs: 15
   ignore_index: 255
 

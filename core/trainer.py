@@ -107,13 +107,13 @@ class Trainer():
             elif torch.cuda.device_count() > 1:
                 self.init_distributed_mode(args)
                 self.rank = args.rank
-                self.world_size = args.world_szie
-                self.lr = self.lr*self.world_size
+                self.world_size = args.world_size
+                self.lr = self.lr*self.world_size # 调账学习率步长，因为梯度为多个向量的均值
                 self.gpus = torch.cuda.device_count()
                 self.evaluator.rank = self.rank
 
                 self.sampler = DistributedSampler(data,rank=self.rank,shuffle= True)
-                batch_sampler = BatchSampler(self.sampler,batch_size=self.batch_size//2,drop_last=True)
+                batch_sampler = BatchSampler(self.sampler,batch_size=self.batch_size,drop_last=True)
                 self.dataloader = DataLoader(data,
                                              pin_memory=True, # 将数据加载到gpu中
                                              num_workers=nw,
@@ -156,6 +156,8 @@ class Trainer():
 
     def train(self):
 
+        self.model.train()
+
         for epoch in range(self.epochs):
             if self.gpus > 1:
                 # 这里会根据每个epoch生成不同的种子来打乱数据
@@ -175,7 +177,7 @@ class Trainer():
                 self.info['train_iou'] = iou
                 self.info['best_train_iou'] =miou
 
-                if epoch % 10 == 0:
+                if epoch > 10 and epoch % 10 == 0:
                     state_dict = {
                         'state_dict': self.model.state_dict(),
                         'info': self.info
@@ -231,12 +233,11 @@ class Trainer():
             self.dataloader = tqdm(self.dataloader,file=sys.stdout)
 
         torch.cuda.empty_cache()
-        self.model.train()
         self.optimizer.zero_grad()
         self.evaluator.reset()
 
         mean_loss = torch.zeros(1).to(self.device)
-
+        batchs = len(self.dataloader)
         for batch,data in enumerate(self.dataloader):
             lidar,label,image = data['lidar'],data['label'],data['image']
             py,px = data['py'],data['px']
@@ -259,7 +260,7 @@ class Trainer():
             assert torch.isfinite(loss),f'ERROR: non-finite loss, ending training! {loss}'
 
             if self.gpus <= 1 or self.rank == 0:
-                print(f'Batch:[{batch+1:>3d}/{self.batch_size}]'
+                print(f'Batch:[{batch+1:>3d}/{batchs}]'
                       f'   Mean Loss:{mean_loss}   mIoU:{miou}   Accuary:{acc}')
 
             self.optimizer.step()

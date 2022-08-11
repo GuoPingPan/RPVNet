@@ -4,6 +4,8 @@ __pycache__
 log
 */__pycache__
 
+dataset
+
 test.py
 check_little_thing.py
 kept_delete.py
