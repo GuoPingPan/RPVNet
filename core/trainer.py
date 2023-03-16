@@ -94,7 +94,7 @@ class Trainer():
         elif torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.fastest = True
-            # 单卡
+            # single-gpu
             if torch.cuda.device_count() == 1:
                 self.gpus = 1
                 self.dataloader = DataLoader(data,
@@ -103,27 +103,27 @@ class Trainer():
                                              collate_fn=data.collate_fn,
                                              shuffle=True)
                 self.model.to(self.device)
-            # 多卡
+            # multi-gpu
             elif torch.cuda.device_count() > 1:
                 self.init_distributed_mode(args)
                 self.rank = args.rank
                 self.world_size = args.world_size
-                self.lr = self.lr*self.world_size # 调账学习率步长，因为梯度为多个向量的均值
+                self.lr = self.lr*self.world_size # balanced learning rate
                 self.gpus = torch.cuda.device_count()
                 self.evaluator.rank = self.rank
 
                 self.sampler = DistributedSampler(data,rank=self.rank,shuffle= True)
                 batch_sampler = BatchSampler(self.sampler,batch_size=self.batch_size,drop_last=True)
                 self.dataloader = DataLoader(data,
-                                             pin_memory=True, # 将数据加载到gpu中
+                                             pin_memory=True, # load data to gpu
                                              num_workers=nw,
                                              sampler=batch_sampler,
                                              collate_fn=data.collate_fn)
-                # 这里device默认是cuda,因为在init进程的时候已经创建set_device了,因此这里会自动分配gpu
                 self.model.to(self.device)
                 
+                
+                # Since we want to make sure that each model starts with the same weights, we need to save and reload it
                 if args.checkpoint is None:
-                    # 由于这里要保证每个模型的初始权重相同,因此要先保存再重新加载
                     if self.rank == 0:
                         ckpt_path = os.path.join(self.log_dir,'initial.ckpt')
                         if not os.path.exists(ckpt_path):
@@ -142,7 +142,6 @@ class Trainer():
                             if "final" not in name:
                                 param.requires_grad_(False)
 
-                # 这里的args.gpu应该是当前进程使用的gpu,而上面的device是'cuda'
                 self.model = torch.nn.parallel.DistributedDataParallel(self.model,device_ids=[args.gpu])
                 param = [p for p in self.model.parameters() if p.requires_grad]
                 self.optimizer = getattr(optim, model_cfg['train']['optimizer'])(params=param,lr=model_cfg['train']['lr'])
@@ -160,7 +159,6 @@ class Trainer():
 
         for epoch in range(self.epochs):
             if self.gpus > 1:
-                # 这里会根据每个epoch生成不同的种子来打乱数据
                 self.sampler.set_epoch(epoch)
 
             loss,(iou,miou,acc) = self.train_each_epoch(epoch)
@@ -194,9 +192,9 @@ class Trainer():
 
     def init_distributed_mode(self,args):
         if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-            # 单机多卡的时候 RANK = LOCAL_RANK
-            # 多机多卡的时候 RANK 代表 全局下的第几个进程
-            #             LOCAL 代表 当前机器下的第几个进程
+            # RANK = LOCAL_RANK when using multiple cards on a single machine
+            # RANK represents the number of processes in the global context
+            # LOCAL represents the process on the current machine
             args.rank = int(os.environ["RANK"])
             args.world_size = int(os.environ['WORLD_SIZE'])
             args.gpu = int(os.environ['LOCAL_RANK'])
@@ -212,9 +210,9 @@ class Trainer():
         args.distributed = True
 
         torch.cuda.set_device(args.gpu)
-        args.dist_backend = 'nccl'  # 通信后端，nvidia GPU推荐使用NCCL
+        args.dist_backend = 'nccl'  # communication backend, nvidia gpus recommend NCCL
         print('| Distributed init (rank {}): {}'.format(args.rank, 'env://'), flush=True)
-        # 多个进程的world_size一样,但是rank不一样
+        # Multiple processes have the same world size, but different ranks
         dist.init_process_group(backend=args.dist_backend,world_size=args.world_size, rank=args.rank)
         dist.barrier()
 
@@ -266,7 +264,7 @@ class Trainer():
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-        # 等待所有进程计算完毕
+        # Wait until all processes have finished computing
         if self.gpus > 1:
             torch.cuda.synchronize(self.device)
 
