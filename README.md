@@ -2,11 +2,16 @@
 
 
 ## Introdution
-This is an implement of LiDAR point cloud segmentation algorithm —— RPVNet. It is a fusion network based on three kinds of representation including Range image，Point Clouds and Voxels. For each Range or Voxel branch, it consist of a stem, four upblocks and four downblock. And point branch only uses four simple mlps bringing great efficiency and ability to extract fine-grained geometric features. What's more, Gated Fusion Module(GFM) was designed to adaptively measurse the importance of feature for each branch.
+This is an **Non-official** implement of **RPVNet:A Deep and Efficient Range-Point-Voxel Fusion Network for LiDAR
+Point Cloud Segmentation**. It is a fusion network based on three kinds of representation including Range image，Point Clouds and Voxels. For each Range or Voxel branch, it consist of a stem, four upblocks and four downblock. And point branch only uses four simple mlps bringing great efficiency and ability to extract fine-grained geometric features. What's more, Gated Fusion Module(GFM) was designed to adaptively measurse the importance of feature for each branch.
+
+<div align="center">
+    <a href="https://github.com/GuoPingPan/RPVNet"><img width="500px" height="auto" src="demo/rpvnet.png"></a>
+</div>
 
 > More details for this job for searching this [paper](https://arxiv.org/abs/2103.12978).
 
-![]()
+
 
 ## Dependencies
 - python 3
@@ -50,7 +55,7 @@ dataset
 ```
 python train.py -d dataset/sequences  --log <path to save model> [--ckpt <path to pretrained model> --freeze_layers --device <cpu or cuda>]
 ```
-3.test
+3. test
 ```
 python inference.py -d dataset/sequences  -ckpt <path to model> [--device <cpu or cuda>]
 ```
