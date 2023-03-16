@@ -36,11 +36,9 @@ class SemanticKITTIInternal:
         self.sample_stride = sample_stride
         self.mode = mode
 
-        # 如果提交则加上val一起进行训练
         if submit:
             self.split.append('08')
 
-        # 组合所有序列的bin数据路径
         self.files = []
         for seq in self.split:
             seq_files = sorted(
@@ -50,11 +48,9 @@ class SemanticKITTIInternal:
             ]
             self.files.extend(seq_files)
 
-        # 根据数据步长进行采样
         if self.sample_stride > 1:
             self.files = self.files[::self.sample_stride]
 
-        # 构建label id 和 label name的映射
         reverse_label_name_mapping = {} # 从label name -> cnt
         self.label_map = np.zeros(260) # 从 原始label -> cnt
         cnt = 0
@@ -91,15 +87,11 @@ class SemanticKITTIInternal:
 
         assert os.path.exists(self.files[index]),f'the [{self.files[index]}] doesn\'t exist.'
 
-        # todo 是否可以加入shuffle操作 [解]:直接在Dataloader中进行shuffer就行
         with open(self.files[index], 'rb') as b:
             block_ = np.fromfile(b, dtype=np.float32).reshape(-1, 4)
         block = np.zeros_like(block_)
 
-        # 数据增强操作
         if self.mode == 'train':
-            # todo 如何去解决旋转会导致索引越界
-            # theta = np.random.uniform(0, 2 * np.pi)
             theta = self.angle
             scale_factor = np.random.uniform(0.95, 1.05)
             rot_mat = np.array([[np.cos(theta), np.sin(theta), 0],
@@ -116,11 +108,10 @@ class SemanticKITTIInternal:
 
             block[:, :3] = np.dot(block_[:, :3], transform_mat)
 
-        # 反射率
+        # reflectivity
         block[:, 3] = block_[:, 3]
 
-        # 读取label
-        # todo 注意除了装有bin文件的文件夹,在路径中不能有多个velodyne
+        # Note you can't have more than one velodyne in your path except the folder with the bin file
         label_file = self.files[index].replace('velodyne', 'labels').replace('.bin', '.label')
         assert os.path.exists(label_file),f'the [{label_file}] doesn\'t exist.'
 
@@ -130,12 +121,10 @@ class SemanticKITTIInternal:
         else:
             all_labels = np.zeros(block.shape[0]).astype(np.int32)
 
-        # 截取32位
         labels_ = self.label_map[all_labels & 0xFFFF].astype(np.int64)
         # print(np.where(labels_==255))
 
         points_xyz = block[:,:3]
-        # 根据 x,y,z 分别减去最小的坐标值
         points_xyz_norm = points_xyz - points_xyz.min(0,keepdims=1)
 
         points_refl = block[:,3]
@@ -150,20 +139,15 @@ class SemanticKITTIInternal:
         return self.data
 
     def do_voxel_projection(self,feat,points_xyz, label):
-        #                             points_xyz是所有点的坐标
 
-        # 求得voxel的坐标
         pc = np.round(points_xyz / self.voxel_size).astype(np.int32)
 
-        # 根据 x,y,z 分别最小的坐标值,在之前已经进行了
-        # pc -= pc.min(0, keepdims=1)
-
-        # 这个函数并不改变pc,pc还是12000个
         _, inds, inverse_map = sparse_quantize(pc, return_index=True,
                                               return_inverse=True)
 
-        # todo 在训练的时候将会剔除某些voxel,因此在这个过程中需要将voxel里面对应的点云也去掉
-        # todo 采用torchsparse来加速
+        # todo: remove some voxels during training, 
+        # so it is necessary to remove the point cloud corresponding to the voxel in this process
+        # uses torchsparse to speed things up
         if self.mode == 'train':
             if len(inds) > self.max_voxels:
                 inds = np.random.choice(inds,self.max_voxels,replace=False)
@@ -177,9 +161,9 @@ class SemanticKITTIInternal:
                 self.point_valid_index = F.sphashquery(old_hash,sparse_hash)
 
 
-        # todo 固定点的个数有助于将 px,py 变成一个规则的 tensor,加快 r2p,p2r
+        # todo: The number of fixed points helps turn px,py into a regular tensor, speeding up r2p,p2r
         # if self.point_valid_index.shape[0] > self.num_points :
-        #     pass
+        #   pass
 
         coord_,label_,feat_ = (points_xyz[self.point_valid_index != -1],
                                label[self.point_valid_index != -1],
@@ -187,7 +171,6 @@ class SemanticKITTIInternal:
                         if self.point_valid_index is not None else (points_xyz,label,feat)
 
 
-        # 这里存进去的坐标都是浮点数
         self.data['lidar'] = SparseTensor(feats=feat_,coords=coord_)
         self.data['label'] = SparseTensor(feats=label_,coords=coord_)
 
@@ -200,7 +183,6 @@ class SemanticKITTIInternal:
                                   points_refl[self.point_valid_index != -1]) \
                      if self.point_valid_index is not None else (points_xyz,points_refl)
 
-        # 计算每个点的模长作为深度
         depth = np.linalg.norm(points_xyz,2,axis=1)
 
         # get scan components
@@ -214,19 +196,12 @@ class SemanticKITTIInternal:
 
 
 
-        # np.nonzero返回数组中的非零索引 [https://blog.csdn.net/u013698770/article/details/54632047/]
-        # 目的是找到64线的交接点,就是从 >0.8到<0.2的这个跳转点,因为是64线lidar,因此有64个点
         new_raw = np.nonzero((proj_x[1:] < 0.2) * (proj_x[:-1] > 0.8))[0] + 1
         proj_y = np.zeros_like(proj_x)
         proj_y[new_raw] = 1
 
-        # 累加求得每个点在哪条线上
         proj_y = np.cumsum(proj_y)
-        # todo 如何去解决旋转会导致索引越界
-        # print(np.where(proj_y>=65.0))
 
-        # scale to image size using angular resolution
-        # 这里 -0.001 能保证后面取floor落在0~2047的范围
         proj_x = proj_x * W - 0.001
 
         px = proj_x.copy()
@@ -239,7 +214,6 @@ class SemanticKITTIInternal:
         v1: using the closet point's depth 
         
         # order in decreasing depth
-        # 使得深度从大到小排列,同一位置将会使用距离小的点的距离来填充
         order = np.argsort(depth)[::-1]
 
         depth = depth[order]
@@ -249,7 +223,7 @@ class SemanticKITTIInternal:
 
 
         proj_range = np.zeros((H, W))
-        # 逆深度
+        # inverse depth
         proj_range[proj_y, proj_x] = 1.0 / depth
 
         proj_reflectivity = np.zeros((H, W))
@@ -279,7 +253,6 @@ class SemanticKITTIInternal:
         refl_image = 20 * (proj_reflectivity - 0.5)
 
 
-        # 默认在channel维度进行拼接了
         range_image = np.stack([depth_image,refl_image]).astype(np.float32)
 
         px = px[np.newaxis,:]

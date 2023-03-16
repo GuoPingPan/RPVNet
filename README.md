@@ -1,5 +1,6 @@
 # RPVNet
 
+</br>
 
 ## Introdution
 This is an **Non-official** implement of **RPVNet:A Deep and Efficient Range-Point-Voxel Fusion Network for LiDAR
@@ -9,9 +10,13 @@ Point Cloud Segmentation**. It is a fusion network based on three kinds of repre
     <a href="https://github.com/GuoPingPan/RPVNet"><img width="500px" height="auto" src="demo/rpvnet.png"></a>
 </div>
 
+</br>
+
 > More details for this job for searching this [paper](https://arxiv.org/abs/2103.12978).
+>
+> Chinese comments Version: https://github.com/GuoPingPan/RPVNet/tree/chinese
 
-
+</br>
 
 ## Dependencies
 - python 3
@@ -24,6 +29,8 @@ Point Cloud Segmentation**. It is a fusion network based on three kinds of repre
 - torchsparse
 
 > torchsparse can be install by flowing [this](https://github.com/mit-han-lab/torchsparse)
+
+</br>
 
 ## Data Preparation
 SemanticKITTI
@@ -46,7 +53,7 @@ dataset
       
 ```
 
-
+</br>
 
 ## Quick Start
 
@@ -59,6 +66,8 @@ python train.py -d dataset/sequences  --log <path to save model> [--ckpt <path t
 ```
 python inference.py -d dataset/sequences  -ckpt <path to model> [--device <cpu or cuda>]
 ```
+
+</br>
 
 ## Reference
 - paper:  [RPVNet: A Deep and Efficient Range-Point-Voxel Fusion Network for LiDAR Point Cloud Segmentation](https://arxiv.org/abs/2103.12978)

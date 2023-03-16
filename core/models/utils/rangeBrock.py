@@ -14,7 +14,6 @@ class ResContextBlock(nn.Module):
         self.act2 = nn.LeakyReLU(True)
         self.bn1 = nn.BatchNorm2d(out_channels)
 
-        # dilation=2 kernel=3的时候整体卷积变成5*5,要使得尺寸不变则padding=2
         self.conv3 = nn.Conv2d(out_channels,out_channels,kernel_size=(3,3),padding=2,dilation=2)
         self.act3 = nn.LeakyReLU(True)
         self.bn2 = nn.BatchNorm2d(out_channels)
@@ -44,7 +43,6 @@ class Block1Res(nn.Module):
         self.act3 = nn.LeakyReLU(True)
         self.bn2 = nn.BatchNorm2d(out_channels)
 
-        # 这里展开是增加了一个十角在中间 https://blog.csdn.net/Murdock_C/article/details/87470248
         self.conv4 = nn.Conv2d(out_channels, out_channels, kernel_size=(2, 2), dilation=2, padding=1)
         self.act4 = nn.LeakyReLU(True)
         self.bn3 = nn.BatchNorm2d(out_channels)
@@ -57,8 +55,6 @@ class Block1Res(nn.Module):
 
         shortcut = self.act1(self.conv1(x))
 
-        # todo 这里论文送入的是 shortcut,但代码送入的是x
-        # todo 但确实contextblock的连线和这里的连线不太一样,可能是contextblock是作为stem,用来增加特征数量
         cat1 = self.bn1(self.act2(self.conv2(x)))
         cat2 = self.bn2(self.act3(self.conv3(cat1)))
         cat3 = self.bn3(self.act4(self.conv4(cat2)))

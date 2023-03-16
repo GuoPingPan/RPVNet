@@ -17,12 +17,6 @@ class GFM(nn.Module):
     def __init__(self,in_features):
         super(GFM, self).__init__()
 
-        # todo 这里其实是否能够将san个MLP融合成一个
-        # todo 也就是说每个对于每个branch提取处理出来的特征进行线性加和的权重是一样的
-        # todo 然后MLP输出变成只有一个维度,每个branch一个输出,总共三个
-        # todo 在该维度进行concat和softmax,得到branch注意力机制,再进行融合
-        # todo 待改进
-
         self.voxel_branch = nn.Linear(in_features,3)
         self.point_branch = nn.Linear(in_features,3)
         self.range_branch = nn.Linear(in_features,3)
@@ -194,7 +188,7 @@ class RPVnet(nn.Module):
 
         range0,points,v0 = self.gfm_stem(range0,points,v0,px,py)
 
-        # todo 这里要不要加上dropout?
+        # todo: add dropout here?
         # v0.F = self.dropout(v0.F)
 
         ''' Fuse 2 '''

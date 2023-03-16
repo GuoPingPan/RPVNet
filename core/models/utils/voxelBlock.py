@@ -54,9 +54,10 @@ class ResidualBlock(nn.Module):
         self.relu = spnn.ReLU(True)
 
     def forward(self, x):
-        # todo 相加后经过relu和先经过relu再相加有什么区别吗
-        # 对于LeakyReLU由于有超参数是有区别的,但如果超参一样应该没区别
-        # 普通ReLU,似乎没有区别
+        # todo: What's the difference between adding with relu and adding with relu first
+        # It makes a difference for LeakyReLU because of hyperparameters, 
+        # but should make no difference if hyperparameters are the same
+        # Plain ReLU, seems to make no difference
         out = self.relu(self.net(x) + self.downsample(x))
         return out
 
